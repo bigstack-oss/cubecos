@@ -611,7 +611,7 @@ ceph_leave_rolling()
 # a tier across all hosts in minutes; an A/B roll takes a node out for the length
 # of a reboot and a firmware switch. Local OSDs come straight back up, mixed
 # version, exactly as ceph intends during an upgrade.
-CEPH_TARGET_RELEASE=squid
+CEPH_TARGET_RELEASE=tentacle
 
 
 # The release name out of each ceph version string on stdin. Squid prints

@@ -1,26 +1,28 @@
 # Cube SDK
 # ceph packages
 
-# Squid, from reef 18.2.8 -- the last reef release, and archived upstream like quincy
-# before it. Ceph only supports upgrading across two majors: squid's notes cover
-# "Upgrading from Quincy or Reef", and tentacle's require reef or squid first, so
-# quincy -> reef -> squid -> tentacle is the path and every hop keeps the next door
-# open.
+# Tentacle, from squid 19.2.7. Ceph only supports upgrading across two majors: tentacle's
+# notes cover "Upgrading from Reef or Squid", so quincy -> reef -> squid -> tentacle was
+# the path, and a cluster still on reef can come straight here.
 #
-# 19.2.7, from the Storage SIG. Since 19.2.6, CephX has a stronger cipher, aes256k, and an upgraded
-# cluster reports HEALTH_ERR (AUTH_INSECURE_SERVICE_TICKETS, AUTH_INSECURE_SERVICE_KEY_TYPE) until
-# its keys are rotated onto it and the monitors issue service tickets with it. The kernel clients --
+# 20.2.5, from the Storage SIG's centos-ceph-tentacle repo. It has to be 20.2.4 or later:
+# CephX's stronger cipher, aes256k, arrived in squid 19.2.6 and tentacle 20.2.4, and
+# tentacle's release notes warn that daemons older than 20.2.4 fail to start on a cluster
+# coming from 19.2.6 or later -- every 3.2.0 cluster is on 19.2.7.
+#
+# A cluster upgraded from before 19.2.6 reports HEALTH_ERR (AUTH_INSECURE_SERVICE_TICKETS,
+# AUTH_INSECURE_SERVICE_KEY_TYPE) until its keys are rotated onto aes256k and the monitors
+# issue service tickets with it. The kernel clients --
 # the /mnt/cephfs mount and ceph-csi's krbd and cephfs mounts -- need a kernel whose libceph has
 # aes256k, 7.0 or later, so the keys move only once every node runs one (jail.ubi9.dockerfile's
 # kernel), after the whole cluster has been upgraded. Tracked on #677.
-CEPH_VERSION:=-19.2.7-1.el9s
-# The Storage SIG signs centos-ceph-squid and centos-nfs-ganesha-5, which ceph and nfs-ganesha come
+CEPH_VERSION:=-20.2.5-1.el9s
+# The Storage SIG signs centos-ceph-tentacle and centos-nfs-ganesha-5, which ceph and nfs-ganesha come
 # from. installdnf checks every rpm against the keys the components pin (core/heavyfs/Makefile).
 GPGKEY_DNF += $(COREDIR)/ceph/RPM-GPG-KEY-CentOS-SIG-Storage 74129C0B173B071A3775951AD4A2E50BE451E5B5
 # nfs-ganesha stays on 5.9: its ceph FSAL links libcephfs.so.2 and librados.so.2,
-# and squid's libcephfs2/librados2 still provide exactly those sonames, so the
-# ganesha packages are untouched by the major bump -- a dnf solve of the squid set
-# on a reef node upgrades 28 ceph packages and leaves both ganesha rpms alone.
+# and tentacle's libcephfs2/librados2 still provide exactly those sonames, as squid's
+# did, so the ganesha packages are untouched by the major bump.
 GANESHA_VERSION:=-5.9-1.el9s
 ROOTFS_DNF_NOARCH_P1 += python3-rados$(CEPH_VERSION) python3-rbd$(CEPH_VERSION)
 # The daemons are named rather than taken through the `ceph` metapackage. From squid
@@ -41,16 +43,16 @@ ROOTFS_DNF_NOARCH += s3cmd ceph-mgr-dashboard$(CEPH_VERSION) python3-rtslib targ
 # These three stay on the *system* python 3.9 and cannot move into the ceph venv
 # below, however much we would like them isolated.
 #
-# ceph-mgr is a C++ binary with an embedded interpreter: the squid rpm carries a hard
+# ceph-mgr is a C++ binary with an embedded interpreter: the tentacle rpm carries a hard
 # `libpython3.9.so.1.0()(64bit)` dependency, so every mgr module -- dashboard,
-# prometheus, restful -- is imported by that 3.9 interpreter and can only ever see
+# prometheus -- is imported by that 3.9 interpreter and can only ever see
 # /usr/lib64/python3.9/site-packages. python3-saml and xmlsec back the dashboard's
 # SAML2 SSO controller (dashboard/controllers/saml2.py does
 # `from onelogin.saml2.auth import ...`), which is the IdP path config_ceph.cpp's
 # ceph_dashboard_idp module configures, so pointing them anywhere else silently
 # turns dashboard SSO into "Required library not found: python3-saml".
 #
-# mon, osd, mds and radosgw are unaffected either way -- their squid rpms declare no
+# mon, osd, mds and radosgw are unaffected either way -- their tentacle rpms declare no
 # python dependency at all, they are pure C++.
 ROOTFS_PIP += python-magic python3-saml xmlsec
 #
@@ -110,9 +112,9 @@ CEPH_HOME_DIR := /opt/ceph
 # below 82, which deleted pkg_resources.
 CEPH_VENV_SETUPTOOLS := 75.6.0
 
-# Cython<3 because that is what squid itself builds against: ceph.spec.in's
+# Cython<3 because that is what tentacle itself builds against: ceph.spec.in's
 # BuildRequires is still the unversioned el9s python3-Cython (0.29.x), as it was
-# for reef. rbd/setup.py does carry a
+# for reef and squid. rbd/setup.py does carry a
 # Cython 3 branch (it sets legacy_implicit_noexcept when it sees one), so 3.x would
 # also compile, but 0.29.x is the combination upstream ships and tests.
 #
@@ -123,11 +125,12 @@ CEPH_VENV_SETUPTOOLS := 75.6.0
 # setup.py import time, before a single line is compiled. rados/setup.py is byte
 # for byte identical between 17.2.6 and 18.2.8 and needs nothing new. Squid changed
 # neither: both setup.py files are byte for byte identical between 18.2.8 and 19.2.7.
-# The bindings follow CEPH_VERSION: 19.2.7's rbd.pyx and c_rbd.pxd differ from
-# 19.2.5's, and compile against that release's librbd headers.
+# Tentacle's setup.py files only swap pkgutil.find_loader for importlib.util.find_spec
+# and pass an optional LDFLAGS through; rbd's still imports packaging.
+# The bindings follow CEPH_VERSION and compile against that release's librbd headers.
 CEPH_VENV_BUILD_REQS := "Cython<3" packaging wheel
 
-CEPH_PYBIND_VERSION := 19.2.7
+CEPH_PYBIND_VERSION := 20.2.5
 CEPH_PYBIND_SRCDIR := /usr/src/ceph/ceph-$(CEPH_PYBIND_VERSION)
 CEPH_PYBIND_CFLAGS := -I$(CEPH_PYBIND_SRCDIR)/src/include
 CEPH_WHEEL_DIR := /usr/src/ceph/wheels

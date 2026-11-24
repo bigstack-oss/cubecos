@@ -102,35 +102,35 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-openstack-$(OPENSTACK_RELEASE)
 	$(Q)# The release rpm pulls a ceph release rpm with it, and which one follows the
 	$(Q)# openstack release: antelope required centos-release-ceph-quincy, caracal and
-	$(Q)# epoxy both require centos-release-ceph-reef. core/ceph pins squid, so the
-	$(Q)# squid release rpm is installed on top and the reef repo it arrives with is
+	$(Q)# epoxy both require centos-release-ceph-reef. core/ceph pins tentacle, so the
+	$(Q)# tentacle release rpm is installed on top and the reef repo it arrives with is
 	$(Q)# disabled. (epoxy's also requires the same cloud, nfv-openvswitch and
 	$(Q)# rabbitmq-38 release rpms caracal's did.)
 	$(Q)#
 	$(Q)# Disabled, not erased: `rpm -e --nodeps` would leave epoxy's release rpm with an
 	$(Q)# unsatisfied dependency and `dnf check` complaining for the life of the image,
 	$(Q)# which is exactly what the quincy handling under antelope ran into. And not left
-	$(Q)# enabled either: the reef and squid release rpms own differently-named
+	$(Q)# enabled either: the reef and tentacle release rpms own differently-named
 	$(Q)# CentOS-Ceph-*.repo files and neither Obsoletes the other, so dnf would see
-	$(Q)# 18.2.z and 19.2.z at once and any *unpinned* ceph dependency could resolve from
+	$(Q)# 18.2.z and 20.2.z at once and any *unpinned* ceph dependency could resolve from
 	$(Q)# the wrong release -- on the build and on a customer node's `dnf update` alike.
 	$(Q)#
 	$(Q)# The disable runs after the openstack release rpm is in, so centos-ceph-reef
 	$(Q)# always exists by then; `dnf config-manager --set-disabled` on a repo that does
 	$(Q)# not exist exits 1 ("No matching repo to modify"), which is how the quincy line
 	$(Q)# had to go when caracal stopped installing it. An openstack release that pairs
-	$(Q)# with squid itself makes this line fail the build rather than no-op, which is the
-	$(Q)# signal to drop it.
+	$(Q)# with tentacle itself makes this line fail the build rather than no-op, which is
+	$(Q)# the signal to drop it.
 	$(Q)#
 	$(Q)# What the openstack repo itself still supplies, now that no service comes
 	$(Q)# from an rpm, is the openvswitch glue rdo-ovn needs and part of the system
 	$(Q)# python 3.9 rpm set. The glue changes between releases -- epoxy's
 	$(Q)# rdo-openvswitch is 3.4 and Obsoletes the openvswitch3.3 core/neutron pins --
 	$(Q)# which is why core/neutron fetches the 3.3 builds from koji instead.
-	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-ceph-squid
-	$(Q)# The squid release rpm writes its repo with gpgcheck=0, so a node's own dnf would install
+	$(Q)chroot $(ROOTDIR) dnf -y install centos-release-ceph-tentacle
+	$(Q)# The tentacle release rpm writes its repo with gpgcheck=0, so a node's own dnf would install
 	$(Q)# from it unchecked
-	$(Q)chroot $(ROOTDIR) dnf config-manager --save --setopt=centos-ceph-squid.gpgcheck=1
+	$(Q)chroot $(ROOTDIR) dnf config-manager --save --setopt=centos-ceph-tentacle.gpgcheck=1
 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-disabled centos-ceph-reef
 	$(Q)chroot $(ROOTDIR) dnf config-manager --set-enabled highavailability
 

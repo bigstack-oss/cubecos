@@ -796,7 +796,7 @@ migrate_ceph()
     # owns it instead, from every node, retried while its own upgrade marker stands.
 
     case $release in
-        nautilus|pacific|quincy|reef|squid)
+        nautilus|pacific|quincy|reef|squid|tentacle)
             for p in $($CEPH osd pool ls) ; do
                 local mode=$($CEPH osd pool get $p pg_autoscale_mode | awk '{print $2}' | tr -d '\n')
                 if [ "$mode" != "on" ] ; then
