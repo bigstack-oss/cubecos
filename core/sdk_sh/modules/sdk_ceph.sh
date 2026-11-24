@@ -614,6 +614,15 @@ ceph_leave_rolling()
 CEPH_TARGET_RELEASE=squid
 
 
+# The release name out of each ceph version string on stdin. Squid prints
+# `ceph version 19.2.7 (<sha>) squid (stable)`; tentacle appends the build type,
+# `ceph version 20.2.5 (<sha>) tentacle (stable - RelWithDebInfo)`, and a cluster
+# halfway through an upgrade reports both forms at once.
+_ceph_release_name()
+{
+    sed -nE 's/.*\)[[:space:]]+([a-z]+)[[:space:]]+\(stable( - [^)]*)?\).*/\1/p'
+}
+
 # Release names currently running in one daemon tier (mon|mgr|osd|mds|rgw).
 # Empty when nothing of that kind runs, or when the mon cannot be reached.
 ceph_tier_releases()
@@ -621,7 +630,7 @@ ceph_tier_releases()
     local tier=${1:-mon}
     $CEPH versions -f json 2>/dev/null \
         | jq -r --arg t "$tier" '.[$t] // {} | keys[]' 2>/dev/null \
-        | sed -nE 's/.*\)[[:space:]]+([a-z]+)[[:space:]]+\(stable\).*/\1/p' \
+        | _ceph_release_name \
         | sort -u
 }
 
@@ -631,7 +640,7 @@ ceph_tier_releases()
 # release that daemon is the only thing making the tier mixed.
 ceph_mds_tier_mixed()
 {
-    local mine=$(ceph-mds --version 2>/dev/null | sed -nE 's/.*\)[[:space:]]+([a-z]+)[[:space:]]+\(stable\).*/\1/p')
+    local mine=$(ceph-mds --version 2>/dev/null | _ceph_release_name)
     [ "$( { ceph_tier_releases mds ; echo "$mine" ; } | sed '/^$/d' | sort -u | wc -l)" -gt 1 ]
 }
 
