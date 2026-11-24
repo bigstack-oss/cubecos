@@ -3804,48 +3804,6 @@ ceph_force_create_unhealth_pg()
     done
 }
 
-ceph_restful_username_list()
-{
-    $CEPH restful list-keys 2>/dev/null | jq -r 'keys[]'
-}
-
-ceph_restful_key_create()
-{
-    local username=$1
-    $CEPH restful create-key $username
-}
-
-ceph_restful_key_delete()
-{
-    local username=$1
-    Quiet -n $CEPH restful delete-key $username
-}
-
-ceph_restful_key_list()
-{
-    $CEPH restful list-keys
-}
-
-# Pin this mgr's restful listener to its own address. The module reads server_addr from the
-# config db, scoped per mgr like prometheus, so the old config-key pair was never consulted.
-# The module only rebinds on restart, and only the active mgr listens, so restart only when
-# this node is listening somewhere else.
-ceph_restful_bind()
-{
-    local addr=$1
-    local host=$2
-    local port=${3:-8003}
-
-    $CEPH config set mgr.$host mgr/restful/server_addr $addr || return 1
-    Quiet -n $CEPH config-key rm mgr/restful/server_addr
-    Quiet -n $CEPH config-key rm mgr/restful/server_port
-
-    local cur=$(ss -Htln "sport = :$port" | awk '{print $4}' | head -1)
-    if [ -n "$cur" ] && [ "$cur" != "$addr:$port" ] ; then
-        $CEPH restful restart
-    fi
-}
-
 ceph_mgr_module_enable()
 {
     local module=$1

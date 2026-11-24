@@ -426,7 +426,6 @@ WriteConfig(bool ha, const std::string& ctrlVip,
         { "skyline", "9999", "http", "" },
         { "cube_cos_api", "8082", "httpchk", "  option  httpchk GET /live" },
         { "cube_cos_ui", "8083", "http", "" },
-        { "ceph_restful_api", "8005,8003", "tcp", "" },
         // Each mgr is reached on its management address, because that is where
         // EnableMgrPrometheus (config_ceph.cpp) binds it: mgr/prometheus/server_addr is set
         // per daemon to MGMT_ADDR. This listener used to take the storage-frontend

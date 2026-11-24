@@ -579,21 +579,19 @@ func setupCephDashboardSso(ip string) error {
 	return nil
 }
 
-// reconfigureCephCerts hands the new certificate to the two ceph endpoints that were
+// reconfigureCephCerts hands the new certificate to the Ceph dashboard, which was
 // given a copy rather than a path. ceph_dashboard_init() is not reusable here: it
 // also creates a radosgw user, wires up SAML2 SSO and runs terraform.
 func reconfigureCephCerts() error {
 	for _, args := range [][]string{
 		{"ceph", "dashboard", "set-ssl-certificate", "-i", certFile},
 		{"ceph", "dashboard", "set-ssl-certificate-key", "-i", keyFile},
-		{"ceph", "config-key", "set", "mgr/restful/crt", "-i", certFile},
-		{"ceph", "config-key", "set", "mgr/restful/key", "-i", keyFile},
 	} {
 		if _, outErr, err := util.ExecCmd(args[0], args[1:]...); err != nil {
 			return errors.Wrap(err, outErr)
 		}
 	}
-	zap.L().Info("Ceph dashboard and mgr restful updated")
+	zap.L().Info("Ceph dashboard updated")
 
 	return nil
 }
@@ -633,7 +631,7 @@ func regenCerts() error {
 		fmt.Println("would sync to:      every node")
 		fmt.Println("would drop:         " + novaCertCopy + " (rebuilt on the next nova commit)")
 		fmt.Println("would restart:      " + strings.Join(certConsumerUnits, " "))
-		fmt.Println("would reconfigure:  ceph dashboard and mgr restful")
+		fmt.Println("would reconfigure:  ceph dashboard")
 		fmt.Println("would re-apply:     keycloak SAML client " + keycloakApiModule)
 		fmt.Println("would re-apply:     ceph dashboard SAML SP (sso setup saml2), then keycloak SAML client " +
 			keycloakCephDashboardModule + " (only if dashboard SSO is enabled)")

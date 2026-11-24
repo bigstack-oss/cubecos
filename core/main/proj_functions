@@ -735,7 +735,6 @@ cube_control_rejoin_set()
     touch /etc/appliance/state/ceph_mgr_influx_enabled
     touch /etc/appliance/state/ceph_msgr2_done
     touch /etc/appliance/state/ceph_osd_pool_done
-    touch /etc/appliance/state/ceph_restful_done
     touch /etc/appliance/state/cinder_pool_done
     touch /etc/appliance/state/manila_init_done
     touch /etc/appliance/state/mysql_done
@@ -753,7 +752,6 @@ cube_control_rejoin_clear()
     rm -f /etc/appliance/state/ceph_mgr_influx_enabled
     rm -f /etc/appliance/state/ceph_msgr2_done
     rm -f /etc/appliance/state/ceph_osd_pool_done
-    rm -f /etc/appliance/state/ceph_restful_done
     rm -f /etc/appliance/state/cinder_pool_done
     rm -f /etc/appliance/state/manila_init_done
     rm -f /etc/appliance/state/mysql_done

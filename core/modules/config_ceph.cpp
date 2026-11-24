@@ -36,7 +36,6 @@
 
 #define MAKRER_POOL "/etc/appliance/state/ceph_osd_pool_done"
 #define MAKRER_CEPHFS "/etc/appliance/state/cephfs_done"
-#define MAKRER_RESTFUL "/etc/appliance/state/ceph_restful_done"
 #define MAKRER_AUTOSCALE "/etc/appliance/state/ceph_autoscale_done"
 #define MAKRER_MSGR2 "/etc/appliance/state/ceph_msgr2_done"
 #define MAKRER_CLIENT "/etc/appliance/state/ceph_client_done"
@@ -59,7 +58,6 @@
 
 #define DASHBOARD_PORT "7443"
 #define DASHBOARD_HA_PORT "7442"
-#define RESTFUL_PORT "8003"
 #define ISCSI_API_PORT "5010"
 
 
@@ -94,9 +92,6 @@ static const char CEPHFS_METADATA_POOL[] = "cephfs_metadata";
 static const char CEPHFS_NAME[] = "cephfs";
 static const char CEPHFS_DEFAULT_SUB_VOLUME_GROUP[] = "cephfs_default_sub_volume_group";
 static const char CEPHFS_STORE_DIR[] = "/mnt/cephfs";
-
-static const char SRV_KEY[] = "/var/www/certs/server.key";
-static const char SRV_CRT[] = "/var/www/certs/server.cert";
 
 static const char GWAPIPASS[] = "Xv67nUJYFL5kravv";
 
@@ -1391,32 +1386,6 @@ EnabledDashbaordISCSIGateway(const std::string myIp, const std::string gwApiPass
 }
 */
 
-// The bind address is re-asserted on every commit, for the same reason as prometheus below:
-// an address pinned once behind a marker goes stale. It is scoped to this mgr (the id is
-// the hostname), so each mgr binds its own management address and failover still works.
-// It goes before the enable, so on a fresh install the module first comes up on that address.
-// Enabling the module and handing it the certificate stay one-time.
-static bool
-EnableMgrRestful(const std::string& myIp, const std::string& hostname)
-{
-    struct stat ms;
-
-    if (!IsControl(s_eCubeRole))
-        return true;
-
-    HexUtilSystemF(0, 0, HEX_SDK " ceph_restful_bind %s %s %s",
-                   myIp.c_str(), hostname.c_str(), RESTFUL_PORT);
-
-    if (stat(MAKRER_RESTFUL, &ms) != 0) {
-        HexUtilSystemF(0, 0, HEX_SDK " ceph_mgr_module_enable restful");
-        HexSystemF(0, "timeout 10 ceph config-key set mgr/restful/crt -i %s 2>/dev/null", SRV_CRT);
-        HexSystemF(0, "timeout 10 ceph config-key set mgr/restful/key -i %s 2>/dev/null", SRV_KEY);
-        HexSystemF(0, "touch " MAKRER_RESTFUL);
-    }
-
-    return true;
-}
-
 /*
 static bool
 EnablePgAutoScale()
@@ -2063,7 +2032,6 @@ Commit(bool modified, int dryLevel)
         CommitRgw(NAME, s_hostname.c_str());
         // CommitISCSI();
 
-        EnableMgrRestful(G(MGMT_ADDR), s_hostname.c_str());
         EnableMgrDashboard(sharedId);
         EnableMgrPrometheus(G(MGMT_ADDR), s_hostname.c_str());
         // EnabledDashbaordISCSIGateway(myIp, gwApiPass);

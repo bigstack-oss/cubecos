@@ -1906,56 +1906,6 @@ CephDeviceTierList(int argc, const char** argv)
 }
 
 static int
-CreateRestfulKeyMain(int argc, const char** argv)
-{
-    if (argc > 2 /* [0]="key_create" [1]="name" */)
-        return CLI_INVALID_ARGS;
-
-    std::string name;
-
-    if (!CliReadInputStr(argc, argv, 1, "Input username: ", &name) || name.length() <= 0) {
-        CliPrint("username is required");
-        return CLI_INVALID_ARGS;
-    }
-
-    HexSpawn(0, HEX_SDK, "ceph_restful_key_create", name.c_str(), NULL);
-
-    return CLI_SUCCESS;
-}
-
-static int
-DeleteRestfulKeyMain(int argc, const char** argv)
-{
-    if (argc > 2 /* [0]="key_delete" [1]="name" */)
-        return CLI_INVALID_ARGS;
-
-    int index;
-    std::string cmd;
-    std::string name;
-
-    cmd = std::string(HEX_SDK) + " ceph_restful_username_list";
-    if (CliMatchCmdHelper(argc, argv, 1, cmd, &index, &name, "Select a username: ") != CLI_SUCCESS) {
-        CliPrintf("Invalid username");
-        return CLI_INVALID_ARGS;
-    }
-
-    HexSpawn(0, HEX_SDK, "ceph_restful_key_delete", name.c_str(), NULL);
-
-    return CLI_SUCCESS;
-}
-
-static int
-ListRestfulKeyMain(int argc, const char** argv)
-{
-    if (argc > 1 /* [0]="key_list" */)
-        return CLI_INVALID_ARGS;
-
-    HexSpawn(0, HEX_SDK, "ceph_restful_key_list", NULL);
-
-    return CLI_SUCCESS;
-}
-
-static int
 CephMirrorSitePair(int argc, const char** argv)
 {
     if (argc > 3) {
@@ -2348,22 +2298,6 @@ CLI_MODE_COMMAND("tier", "delete", CephDeviceTierDelete, NULL,
 CLI_MODE_COMMAND("tier", "list", CephDeviceTierList, NULL,
     "List the device tiers and where the registry and Ceph disagree.",
     "list");
-
-CLI_MODE("storage", "restful",
-    "Work with stroage restful API settings.",
-    !HexStrictIsErrorState() && !FirstTimeSetupRequired() && CubeSysCommitAll());
-
-CLI_MODE_COMMAND("restful", "key_create", CreateRestfulKeyMain, NULL,
-    "Create a restful API for a given name.",
-    "key_create [<name>]");
-
-CLI_MODE_COMMAND("restful", "key_delete", DeleteRestfulKeyMain, NULL,
-    "Delete a restful API for a given name.",
-    "key_delete [<name>]");
-
-CLI_MODE_COMMAND("restful", "key_list", ListRestfulKeyMain, NULL,
-    "List all restful API keys.",
-    "key_list");
 
 // This mode is not available in STRICT error state
 CLI_MODE("storage", "mirror",
