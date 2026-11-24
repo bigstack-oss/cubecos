@@ -303,7 +303,12 @@ _set_ipt_service_int()
     source hex_tuning $SETTINGS_TXT cubesys.control.vip
     [ "x$T_cubesys_control_vip" = "x" ] || iptables -A $chain -s $T_cubesys_control_vip -j ACCEPT
 
-    for A in $(cubectl node list -j | jq -r .[].ip.management | sort -u) ; do
+    # The control group is fixed at install (cubesys.control.addrs), but a control enters
+    # `cubectl node list` only when its own join completes. cluster_map_update rebuilds this chain
+    # on every add, so a rebuild between two control joins would drop the control still joining,
+    # and with it its rabbitmq join_cluster on 25672: every control in the group is accepted too.
+    source hex_tuning $SETTINGS_TXT cubesys.control.addrs
+    for A in $( { tr ',' '\n' <<<"${T_cubesys_control_addrs:-}" ; cubectl node list -j | jq -r .[].ip.management ; } | grep -v '^$' | sort -u) ; do
         iptables -A $chain -s $A -j ACCEPT
     done
 
