@@ -956,7 +956,6 @@ UpdateConfig(
         fprintf(fout, "rgw frontends = beast endpoint=%s:8888\n", myip.c_str());
 
         // Keystone information
-        fprintf(fout, "rgw keystone api version = 3\n");
         fprintf(fout, "rgw keystone url = http://%s:5000\n", sharedId.c_str());
         fprintf(fout, "rgw keystone admin user = admin_cli\n");
         fprintf(fout, "rgw keystone admin password = %s\n", adminCliPass.c_str());
