@@ -529,6 +529,29 @@ rootfs_install::
 # than a ceiling -- it removed pkgutil.ImpImporter, which pkg_resources references
 # unconditionally before setuptools 66.1 -- and 81.0.0 clears it.
 
+# set up the execution context for openstack gazpacho
+#
+# Same steps as the epoxy venv, through the NEXT_* variables, with setuptools pinned
+# at creation for the same reason. Nothing runs from this venv yet: every service and
+# /usr/bin/openstack still come from $(OPENSTACK_HOME_DIR), and the services move in
+# one at a time.
+rootfs_install::
+	$(Q)chroot $(ROOTDIR) mkdir -p $(NEXT_OPENSTACK_HOME_DIR)
+	$(Q)chroot $(ROOTDIR) python$(NEXT_PYTHON_VER) -m venv $(NEXT_OPENSTACK_HOME_DIR)
+	$(Q)cp -f $(NEXT_OPENSTACK_PIP_CONSTRAINT) $(ROOTDIR)$(NEXT_OPENSTACK_HOME_DIR)/
+	$(Q)chroot $(ROOTDIR) bash -c "source $(NEXT_OPENSTACK_HOME_DIR)/bin/activate && pip install --upgrade pip"
+	$(Q)chroot $(ROOTDIR) $(NEXT_OPENSTACK_HOME_DIR)/bin/pip install --upgrade -c $(NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT) setuptools wheel
+
+# NOTE: os-gazpacho-pip-upper-constraints.txt is upstream's stable/2026.1
+# upper-constraints.txt copied down verbatim, save for the one local delta the epoxy
+# file also carries: setuptools, which upstream does not pin. The value is epoxy's,
+# 81.0.0, for the ceiling the NOTE above gives -- below 82, which deleted
+# pkg_resources, because any --no-build-isolation install into this venv builds
+# against this setuptools. The sdists that ceiling was for now ship wheels: every
+# XStatic package 2026.1 pins has one. Whether anything else horizon 2026.1 pulls in
+# still needs pkg_resources is for horizon's move to settle; until then the venv
+# starts from the value epoxy runs on.
+
 # install the openstack cli inside the python 3.12 virtual environment
 #
 # /usr/bin/openstack was the python3-openstackclient rpm, so it ran as
