@@ -99,12 +99,12 @@ NOVA_PATCHDIR := $(COREDIR)/nova/$(OPENSTACK_RELEASE)_patch
 # add 16 packages there and change no version those three already hold.
 #
 # The /usr/bin/nova-*, /usr/bin/placement-* and /usr/bin/uwsgi symlinks are the only
-# thing outside this venv that has to follow: the eleven service units, config_nova.cpp,
+# thing outside this venv that has to follow: the ten service units, config_nova.cpp,
 # placement-uwsgi.ini and hex_sdk reach nova and placement through them. /usr/bin/uwsgi
-# is placement's alone -- barbican runs gunicorn -- and it has to move, because uWSGI
-# embeds its own interpreter and only the epoxy build can load a python 3.12 venv
-# through `home`. /usr/bin/nova is python-novaclient's console script, which hex_sdk
-# drives for live migration, evacuation and reset-state.
+# serves placement and nova's compute and metadata APIs -- barbican runs gunicorn -- and
+# it has to move, because uWSGI embeds its own interpreter and only the epoxy build can
+# load a python 3.12 venv through `home`. /usr/bin/nova is python-novaclient's console
+# script, which hex_sdk drives for live migration, evacuation and reset-state.
 #
 # libvirt-python is the one C extension here and it compiles against whatever
 # libvirt-devel headers are present, so os-epoxy-pip-upper-constraints.txt carries the
@@ -145,14 +145,9 @@ rootfs_install::
 	$(Q)rm -f $(ROOTDIR)/etc/resolv.conf
 	$(Q)# Link Nova binaries
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova /usr/bin/nova
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-api /usr/bin/nova-api
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-api-metadata /usr/bin/nova-api-metadata
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-api-os-compute /usr/bin/nova-api-os-compute
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-api-wsgi /usr/bin/nova-api-wsgi
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-compute /usr/bin/nova-compute
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-conductor /usr/bin/nova-conductor
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-manage /usr/bin/nova-manage
-	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-metadata-wsgi /usr/bin/nova-metadata-wsgi
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-novncproxy /usr/bin/nova-novncproxy
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-policy /usr/bin/nova-policy
 	$(Q)chroot $(ROOTDIR) ln -sf $(OPENSTACK_HOME_DIR)/bin/nova-rootwrap /usr/bin/nova-rootwrap
@@ -232,6 +227,8 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/nova/nova.conf.sample $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/policy.yaml.sample $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/policy.json $(ROOTDIR)/tmp/nova/
+	$(Q)cp -f $(COREDIR)/nova/nova-api-uwsgi.ini.in $(ROOTDIR)/tmp/nova/
+	$(Q)cp -f $(COREDIR)/nova/nova-metadata-uwsgi.ini.in $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/release $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/placement-dist.conf $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/placement.conf.sample $(ROOTDIR)/tmp/nova/
@@ -246,7 +243,6 @@ rootfs_install::
 	$(Q)cp -f $(COREDIR)/nova/openstack-nova-spicehtml5proxy.service $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/openstack-nova-novncproxy.service $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/openstack-nova-serialproxy.service $(ROOTDIR)/tmp/nova/
-	$(Q)cp -f $(COREDIR)/nova/openstack-nova-os-compute-api.service $(ROOTDIR)/tmp/nova/
 	$(Q)cp -f $(COREDIR)/nova/openstack-nova-ironic-compute.service $(ROOTDIR)/tmp/nova/
 	$(Q)# copy security configurations
 	$(Q)cp -f $(COREDIR)/nova/nova-sudoers $(ROOTDIR)/tmp/nova/
@@ -278,6 +274,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/nova/api-paste.ini /etc/nova/api-paste.ini
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 $(OPENSTACK_HOME_DIR)/etc/nova/rootwrap.conf /etc/nova/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/policy.json /etc/nova/policy.json
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/nova-api-uwsgi.ini.in /etc/nova/nova-api-uwsgi.ini.in
+	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/nova-metadata-uwsgi.ini.in /etc/nova/nova-metadata-uwsgi.ini.in
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/release /etc/nova/release
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/placement-dist.conf /usr/share/placement/placement-dist.conf
 	$(Q)chroot $(ROOTDIR) install -p -D -m 640 /tmp/nova/placement.conf.sample /etc/placement/placement.conf
@@ -292,7 +290,6 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/openstack-nova-spicehtml5proxy.service /usr/lib/systemd/system/openstack-nova-spicehtml5proxy.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/openstack-nova-novncproxy.service /usr/lib/systemd/system/openstack-nova-novncproxy.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/openstack-nova-serialproxy.service /usr/lib/systemd/system/openstack-nova-serialproxy.service
-	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/openstack-nova-os-compute-api.service /usr/lib/systemd/system/openstack-nova-os-compute-api.service
 	$(Q)chroot $(ROOTDIR) install -p -D -m 644 /tmp/nova/openstack-nova-ironic-compute.service /usr/lib/systemd/system/openstack-nova-ironic-compute.service
 	$(Q)# install security configurations
 	$(Q)chroot $(ROOTDIR) install -p -D -m 440 /tmp/nova/nova-sudoers /etc/sudoers.d/nova
@@ -312,6 +309,8 @@ rootfs_install::
 	$(Q)chroot $(ROOTDIR) chown root:nova /etc/nova/api-paste.ini
 	$(Q)chroot $(ROOTDIR) chown root:nova /etc/nova/rootwrap.conf
 	$(Q)chroot $(ROOTDIR) chown root:nova /etc/nova/policy.json
+	$(Q)chroot $(ROOTDIR) chown root:nova /etc/nova/nova-api-uwsgi.ini.in
+	$(Q)chroot $(ROOTDIR) chown root:nova /etc/nova/nova-metadata-uwsgi.ini.in
 	$(Q)chroot $(ROOTDIR) chown nova:root /var/log/nova
 	$(Q)chroot $(ROOTDIR) chmod 0750 /var/log/nova
 	$(Q)chroot $(ROOTDIR) chown nova:root /var/run/nova

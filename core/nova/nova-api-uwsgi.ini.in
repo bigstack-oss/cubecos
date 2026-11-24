@@ -1,0 +1,35 @@
+# Rendered by config_nova.cpp into /etc/nova/nova-api-uwsgi.ini, with the controller
+# address nova-api used to listen on and the worker count it ran with
+[uwsgi]
+http-socket = @BIND_ADDR@:8774
+module = nova.wsgi.osapi_compute:application
+home = /opt/openstack-epoxy
+
+# sys.argv for nova's oslo.config: the files the eventlet unit passed, and the log file
+# it wrote. With only log_dir set, oslo.log names the file after the outermost stack
+# frame, which under uWSGI is not nova-api
+pyargv = --config-file /etc/nova/nova.conf --config-dir /etc/nova/nova.d --log-file nova-api.log
+
+master = true
+# One thread per process: nova still monkey-patches eventlet when it is loaded as a
+# WSGI application in this release
+processes = @WORKERS@
+
+# Loading the application sets up nova's database engine, RPC transport and eventlet
+# hub. Do that in each worker instead of forking them out of the master
+lazy-apps = true
+# Without it a worker whose application failed to load (the database not up yet) keeps
+# running and answers every request with an error. With lazy-apps the instance exits
+# instead and systemd starts it again
+need-app = true
+# SIGTERM means reload to uWSGI otherwise
+die-on-term = true
+
+# uWSGI's default request block is 4096 bytes (see placement-uwsgi.ini); eventlet took
+# header lines up to nova's [wsgi] max_header_line, 16384
+buffer-size = 65535
+# http-socket closes the connection after each response without saying so, as in
+# core/barbican/vassals-barbican-api.ini
+add-header = Connection: close
+# nova's requestlog middleware already writes one line per request to nova-api.log
+disable-logging = true

@@ -9,16 +9,25 @@ NotifyAccess=all
 Restart=always
 User=nova
 ExecStart=/usr/bin/nova-conductor --config-file /etc/nova/nova.conf --config-dir /etc/nova/nova.d
-# Signal only the master on stop, as openstack-nova-api.service does.
+# Signal only the master on stop; oslo.service's ProcessLauncher stops its workers itself.
 #
 # With the default control-group mode systemd sends SIGTERM to every worker, the
 # worker's handler resets its handlers to SIG_DFL and starts a graceful stop, and the
 # master's own SIGTERM then kills it before that stop ends: on cn13 (2026-10-08) all 90
 # nova-conductor workers over 30 stops were "killed by signal 15", so none finished its
-# graceful stop, and any RPC one was handling was cut off. The same double signal can
-# also strand the log lock the master shares with its workers (see
-# openstack-nova-api.service), though no stop hung here. Under mixed all 90 "exited with
-# status 0", each stop taking 0.6-5.1s.
+# graceful stop, and any RPC one was handling was cut off. Under mixed all 90 "exited
+# with status 0", each stop taking 0.6-5.1s.
+#
+# The same double signal can also strand the log lock the master shares with its
+# workers, though no stop hung here. oslo.log's PipeMutex is a byte in a pipe the master
+# creates before it forks, so the master and every worker read and write the same pipe;
+# a worker the master's SIGTERM kills outright while it holds the byte, writing its
+# shutdown log, leaves the master blocked for good on its next log line, its workers
+# zombies, until the graceful_shutdown_timeout SIGALRM ends it 60s later. That is what
+# nova-api did while it still ran under oslo.service: on cn13 (2026-10-08, oslo.log
+# 7.1.0, oslo.service 4.1.2) 5 of 39 stops took 60s, the stuck master's lock showing
+# owner=None and an empty pipe, and a GPU type switch, whose restart_nova stops nova-api,
+# crossed the 60s proxy timeout into a 504 on the Web UI (#1754).
 KillMode=mixed
 
 [Install]

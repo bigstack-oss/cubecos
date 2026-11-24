@@ -1323,8 +1323,8 @@ _live_migration_repair()
         rabbitmq) Quiet -n $HEX_CLI -c cluster check_repair MsgQueue ;;
         nova-conductor|nova-scheduler|no-migration-target|cinder-volume)
             # wedged API workers (backed-up recv-Q) and enabled-down services are
-            # what an authenticated $OPENSTACK probe fails on
-            cmd -c $HEX_SDK stale_api_check_repair openstack-nova-api 8774 nova-api python3 0
+            # what an authenticated $OPENSTACK probe fails on. nova-api is left out:
+            # under uWSGI a backed-up queue is not a wedged server (health_nova_check)
             cmd -c $HEX_SDK stale_api_check_repair openstack-cinder-api 8776 cinder-api python3 0
             if [ $($OPENSTACK compute service list -f value -c Status -c State 2>/dev/null | grep -ci "enabled down") -ge 1 ] ; then
                 cmd -c systemctl restart openstack-nova-scheduler
