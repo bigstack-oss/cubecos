@@ -151,20 +151,24 @@ OPENSTACK_PIP_INSTALL = env UV_CACHE_DIR=$(OPENSTACK_UV_HOME)/cache UV_LINK_MODE
 # after it. This pin does not follow the release name, ever.
 PROJ_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/rootfs-pip-constraints.txt
 
-# openstack next version -- left blank until the next hop, then filled in the way
-# epoxy's were while it was NEXT_*: a second venv is built from these, components move
-# into it one at a time, and the values are promoted above once the move is done.
-NEXT_OPENSTACK_RELEASE :=
-NEXT_OPENSTACK_HOME_DIR :=
-NEXT_OPS_GITHUB_BRANCH_01 :=
-NEXT_OPS_GITHUB_BRANCH_02 :=
-NEXT_PYTHON_VER :=
-NEXT_PYTHON_PATCH_VER :=
-NEXT_OPENSTACK_PIP_CONSTRAINT ?=
-NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT :=
+# openstack next version -- filled in the way epoxy's were while it was NEXT_*: a
+# second venv is built from these, components move into it one at a time, and the
+# values are promoted above once the move is done.
+#
+# The next hop is gazpacho (2026.1), the SLURP release after epoxy. It gets its own
+# python rather than sharing the epoxy venv's 3.12: 3.13 is the upper bound of the
+# testing 2026.1 requires, and 3.13.18 is its newest release.
+NEXT_OPENSTACK_RELEASE := gazpacho
+NEXT_OPENSTACK_HOME_DIR := /opt/openstack-$(NEXT_OPENSTACK_RELEASE)
+NEXT_OPS_GITHUB_BRANCH_01 := stable/2026.1
+NEXT_OPS_GITHUB_BRANCH_02 := unmaintained/2026.1
+NEXT_PYTHON_VER := 3.13
+NEXT_PYTHON_PATCH_VER := 3.13.18
+NEXT_OPENSTACK_PIP_CONSTRAINT ?= $(COREDIR)/heavyfs/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
+NEXT_OPENSTACK_INSTALLED_PIP_CONSTRAINT := $(NEXT_OPENSTACK_HOME_DIR)/os-$(NEXT_OPENSTACK_RELEASE)-pip-upper-constraints.txt
 
 # The epoxy hop is complete -- the block above IS epoxy (2025.1, the SLURP release
-# after caracal) now, and there is no second runtime. /opt/openstack-epoxy was built
+# after caracal) now, and the caracal runtime is gone. /opt/openstack-epoxy was built
 # alongside the caracal venv with a python of its own, 3.12 -- the newest runtime
 # 2025.1 is tested on, and what #652 asked for -- and the services moved into it one
 # at a time:
