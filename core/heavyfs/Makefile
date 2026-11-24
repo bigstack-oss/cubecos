@@ -236,11 +236,11 @@ $(foreach p,$(QEMU_PKGS),$(eval ROOTFS_DNF_DL_FROM += $(QEMU_URL)/$(p)-$(QEMU_NV
 # it: each Rocky download is pinned by its sha256 instead, taken from a copy that verified against
 # Rocky 9's release key (21CB256AE16FC54C6E652949702D426D350D275D).
 #
-# ROCKY_PATH is where every Rocky download in this file comes from. Rocky keeps only its current
-# minor release under pub/, so once Rocky 9.9 ships these downloads fail loudly rather than quietly.
-# 9.8's tree then moves to vault/rocky/9.8, with the same files and so the same pins: pointing
-# ROCKY_PATH there is the one-line fix, until the entries are taken from 9.9 or Stream catches up.
-ROCKY_PATH := pub/rocky/9.8
+# ROCKY_PATH is where the Rocky downloads in this file come from, but for the 9.9 entries below.
+# Rocky keeps only its current minor release under pub/: 9.9 has shipped, and 9.8's tree has moved
+# to vault/rocky/9.8, with the same files and so the same pins. The entries stay on 9.8's builds
+# until they are taken from 9.9 or Stream catches up.
+ROCKY_PATH := vault/rocky/9.8
 RSYNC_NVR := 3.2.7-1.el9_8
 ROOTFS_DNF_DL_FROM += $(ROCKY_DL_HOST)/$(ROCKY_PATH)/BaseOS/x86_64/os/Packages/r/rsync-$(RSYNC_NVR).x86_64.rpm
 PINNED_DNF += c10dd298e3d664a0dcc18fc3aeb3273745ef55d9745f1b73e8f35e5a90c6e245 rsync-$(RSYNC_NVR).x86_64.rpm
