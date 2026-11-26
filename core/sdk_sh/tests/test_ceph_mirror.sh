@@ -1,7 +1,8 @@
 #!/bin/bash
 #
 # ceph_mirror_peer_vip / ceph_mirror_daemon_restart / ceph_mirror_promoted_instance_list:
-# a peer name with '-', the daemon start limit, and both openstackclient server json shapes.
+# a peer name with '-', the daemon start limit, both openstackclient server json shapes,
+# and a VM left out because a volume is not primary is named on stderr.
 #
 #   Run: bash test_ceph_mirror.sh
 #
@@ -60,8 +61,14 @@ J
 echo true > $T/rbd/volume-b1 ; echo false > $T/rbd/volume-d1 ; echo true > $T/rbd/volume-b2
 chk "osc 7 json, one volume not promoted"     "$(mirror_dir_run | grep -c vm-new)" "0"
 chk "older json, all promoted"                "$(mirror_dir_run | grep vm-old)" "vm-old,admin,t2.small,net1,b2"
+# the CLI list (stdout) leaves vm-new out; stderr names it, once, in the non-verbose run only
+plain_run(){ eval "$(declare -f ceph_mirror_promoted_instance_list | sed "s|/var/lib/ceph/rbd-mirror|$T/srv|")" ; VERBOSE='' ceph_mirror_promoted_instance_list ; }
+chk "skipped VM not offered"                  "$(plain_run 2>/dev/null | paste -sd, -)" "vm-old"
+chk "skipped VM named on stderr"              "$(plain_run 2>&1 >/dev/null)" "skipped vm-new: not all of its volumes are primary on this site (b1 d1)"
+chk "verbose run does not repeat it"          "$(mirror_dir_run 2>&1 >/dev/null)" ""
 echo true > $T/rbd/volume-d1
 chk "osc 7 json, all promoted"                "$(mirror_dir_run | grep vm-new)" "vm-new,admin,t2.nano,net1,b1 d1"
+chk "nothing skipped, nothing on stderr"      "$(plain_run 2>&1 >/dev/null)" ""
 
 echo "pass=$pass fail=$fail"
 [ $fail -eq 0 ]
