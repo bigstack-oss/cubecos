@@ -3463,6 +3463,57 @@ _health_named_rndc()
     return 1
 }
 
+# Status word of one lookup of <name> at <server>, or "timeout" when nothing came back.
+_health_dig_status()
+{
+    local st=$(dig +time=3 +tries=1 +noall +comments @$1 $2 A 2>/dev/null | sed -n 's/.*status: \([A-Z]*\),.*/\1/p' | head -n 1)
+    echo "${st:-timeout}"
+}
+
+# Run on a control: does its named, at <addr>, resolve a name it has to forward? The name is new
+# each time, so no cache answers it, and NOERROR or NXDOMAIN counts as an answer. When named gives
+# none in two tries, the same kind of name goes to the nameservers in resolv.conf that are not the
+# cluster's own named (<exclude>, this node, loopback). Only if one of those answers is named at
+# fault: forwarders and those nameservers both come from net.dns, so a site without outside DNS,
+# or without forwarders, has nothing that answers. Prints "ok <named>", "ng <named> <ns> <ns's>"
+# or "unknown <named>". #2394: a named that cannot reach its forwarders still answers rndc.
+health_named_forward_probe()
+{
+    local addr=$1
+    shift
+    local excl=" $* $(hostname -I 2>/dev/null) "
+    local n=$(date +%s%N)$RANDOM
+    local st i ns r tried=0
+
+    for i in 1 2 ; do
+        st=$(_health_dig_status $addr cos-health-$n-$i.example.com)
+        case $st in NOERROR|NXDOMAIN) echo "ok $st" ; return 0 ;; esac
+    done
+    for ns in $(awk '/^nameserver/{print $2}' /etc/resolv.conf) ; do
+        case $ns in 127.*|::1) continue ;; esac
+        [[ "$excl" == *" $ns "* ]] && continue
+        [ $tried -lt 3 ] || break
+        tried=$((tried + 1))
+        r=$(_health_dig_status $ns cos-health-$n-r.example.com)
+        case $r in NOERROR|NXDOMAIN) echo "ng $st $ns $r" ; return 0 ;; esac
+    done
+    echo "unknown $st"
+}
+
+# Fails, printing what named and the nameserver that did answer returned, only when the probe on
+# <node> says named is at fault. A probe that cannot run (ssh, a node without it) is not a fault.
+_health_named_forward()
+{
+    local addr=$(echo "$CUBE_NODE_CONTROL_JSON" | jq -r ".[] | select(.hostname == \"$1\") | .ip.management")
+    local excl="$(echo "$CUBE_NODE_CONTROL_JSON" | jq -r '.[].ip.management' | paste -sd' ' -) $(shared_id)"
+    local res verdict st ns r
+    res=$(timeout $((SRVSTO + 10)) ssh -n root@$1 $HEX_SDK health_named_forward_probe ${addr:-$1} $excl 2>/dev/null)
+    read -r verdict st ns r <<< "$res"
+    [ "$verdict" = "ng" ] || return 0
+    echo "$st from named, $r from $ns"
+    return 1
+}
+
 health_designate_check()
 {
     stale_api_check_repair designate-api 9001 designate-api python3
@@ -3518,6 +3569,10 @@ health_designate_check()
                 ERR_CODE=14
                 ERR_LOG="journalctl -n $ERR_LOGSIZE -u named"
                 ERR_MSG+="$node named refuses rndc: $res\n"
+            elif ! res=$(_health_named_forward $node) ; then
+                ERR_CODE=15
+                ERR_LOG="journalctl -n $ERR_LOGSIZE -u named"
+                ERR_MSG+="$node named cannot resolve outside names: $res\n"
             fi
         done
     fi
