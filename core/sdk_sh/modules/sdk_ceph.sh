@@ -5187,9 +5187,8 @@ _ceph_device_tier_target_pool_size()
     fi
 }
 
-# anchored existence checks. os_volume_type_create's own check is an unanchored
-# grep, so "seki1" matches an existing "seki1-ssd" there -- never reuse it to
-# decide whether something is already present.
+# anchored existence checks: whole names only, so "seki1" never matches an
+# existing "seki1-ssd".
 _ceph_device_tier_has_class() { $CEPH osd crush class ls 2>/dev/null | jq -r '.[]' | grep -qx "$1" ; }
 _ceph_device_tier_has_rule()  { $CEPH osd crush rule ls 2>/dev/null | grep -qx "$1" ; }
 _ceph_device_tier_has_pool()  { $CEPH osd pool ls 2>/dev/null | grep -qx "$1" ; }

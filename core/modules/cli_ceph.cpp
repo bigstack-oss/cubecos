@@ -1218,9 +1218,8 @@ CephDeviceTierNameOk(const std::string& tier)
 
 // Is this name free to become a device tier?
 //
-// The comparison is whole-name, never a substring: os_volume_type_create's own
-// existence check is an unanchored grep, which answers yes for "seki1" when
-// only "seki1-ssd" exists, so it cannot be reused to decide this.
+// The comparison is whole-name, never a substring: a substring match answers
+// yes for "seki1" when only "seki1-ssd" exists.
 //
 // A name the registry already lists is not a collision with itself, and
 // *existing says so: re-running create is how a tier of ours that is missing a
