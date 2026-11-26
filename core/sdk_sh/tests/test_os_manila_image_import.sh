@@ -67,6 +67,7 @@ fake_openstack() {
             for id in "$@" ; do
                 if grep -qxF "$id" "$IN_USE"; then
                     echo "Image $id is in use" >&2
+                    # openstackclient 7.5.1 deletes the rest and exits 1 (seen with a protected image)
                     rc=1
                 elif [ -f "$TABLE/$id" ]; then
                     rm "$TABLE/$id"
@@ -94,6 +95,8 @@ fake_openstack() {
                 return 2
             fi
             id=$1
+            # openstackclient 7.5.1: image set exits 1 when it fails
+            [ "$action" != set ] || [ "$id" != "$SET_FAIL_ID" ] || return 1
             [ -f "$TABLE/$id" ] || return 1
             IFS='|' read -r name tags < "$TABLE/$id"
             [ -z "$new_name" ] || name=$new_name
@@ -129,7 +132,7 @@ reset() {
     mkdir "$TABLE"
     : > "$CALLS"
     : > "$IN_USE"
-    NEXT=0 NEW='' IMPORT_FAIL=0
+    NEXT=0 NEW='' IMPORT_FAIL=0 SET_FAIL_ID=''
 }
 run_import() {
     : > "$CALLS"
@@ -223,6 +226,21 @@ add_image "$OTHER" "$ACTIVE-custom" 'customer-tag'
 run_import
 check_current '8 unrelated image'
 check_image '8 untouched custom image' "$OTHER" "$ACTIVE-custom" 'customer-tag'
+
+# 9. Tagging the new image must report failure.
+reset
+SET_FAIL_ID=aabbccdd-1234-4abc-8def-000000000001
+run_import
+if [ "$RC" != 0 ]; then ok; else bad '9 new image tag must fail'; fi
+
+# 10. A later retirement must not hide an earlier survivor's failure.
+reset
+add_image "$OTHER" "$ACTIVE" "$ACTIVE"
+add_image "$OLD" "$ACTIVE" "$ACTIVE"
+printf '%s\n' "$OTHER" "$OLD" > "$IN_USE"
+SET_FAIL_ID=$OTHER
+run_import
+if [ "$RC" != 0 ]; then ok; else bad '10 survivor retirement must fail'; fi
 
 if [ "$fail" = 0 ]; then
     echo "PASS ($pass checks)"

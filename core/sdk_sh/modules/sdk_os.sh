@@ -913,7 +913,12 @@ os_image_import()
 
         echo "[$(date +"%T")] Converting image to RAW format ... "
         if [ "x$pool" = "xglance-images" ] ; then
-            qemu-img convert -p -O raw "$IMG" "$img_raw"
+            if ! qemu-img convert -p -O raw "$IMG" "$img_raw" ; then
+                rm -f "$img_raw"
+                cmd rm -f $mf_importing
+                echo "[$(date +"%T")] Failed to convert $file"
+                return 1
+            fi
             if [[ $file =~ efi ]] ; then
                 properties+=" --property hw_firmware_type=uefi --property os_secure_boot=optional"
             else
@@ -987,7 +992,13 @@ os_image_import()
     if [ "x$pool" = "xglance-images" ] ; then
         backend=$(os_cinder_get_volume_backend_host_by_volume_type "$volume_type" | jq -r ".[0]")
         img_id=$(uuidgen)
-        glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility ${visibility:-public} --store ${backend:-cube} --file $img_name $properties --name $name --progress --id $img_id
+        if ! glance --os-project-domain-name ${domain:-default} --os-project-name admin image-create --disk-format raw --container-format bare --visibility ${visibility:-public} --store ${backend:-cube} --file $img_name $properties --name $name --progress --id $img_id ; then
+            $OPENSTACK image delete $img_id >/dev/null 2>&1
+            [ -z "$img_raw" ] || rm -f "$img_raw"
+            cmd rm -f $mf_importing
+            echo "[$(date +"%T")] Failed to import image $name"
+            return 1
+        fi
         $OPENSTACK image set --project ${proj_name:-admin} $img_id >/dev/null 2>&1
     else
         local vol_name=""
@@ -1042,9 +1053,11 @@ os_image_import()
     fi
     echo "[$(date +"%T")] Finished creating image $name"
 
-    # clean up
+    # clean up; the marker removal reaches every node, so an unreachable
+    # one must not fail an image that was imported
     [ -z "$img_raw" ] || rm -f "$img_raw"
     cmd rm -f $mf_importing
+    return 0
 }
 
 os_extpack_image_mount()
@@ -1075,6 +1088,7 @@ os_extpack_image_import()
     local ext_folder=${2%%:*}
     declare -A PIDS
 
+    local failed=
     pushd $dir/$ext_folder >/dev/null
     for PREFIX in ipa-kernel- ipa-initramfs- amphora- manila- k8s- appfw- rancher-cluster- ; do
         local img=$(ls -1 ${PREFIX}*.{qcow2,vdi,vhd,vhdx,vmdk,ami,raw,img,kernel,tgz} 2>/dev/null | head -1)
@@ -1102,15 +1116,20 @@ os_extpack_image_import()
             appfw-)
                 local appfw_dir=/opt/appfw/images/
                 cmd -c "mkdir -p $appfw_dir"
-                ( tar xf $dir/$ext_folder/$img -C $appfw_dir ; cubectl node rsync -r control $appfw_dir )
+                ( tar xf $dir/$ext_folder/$img -C $appfw_dir && cubectl node rsync -r control $appfw_dir )
                 ;;
             *) echo "Unknown builtin image prefix: $PREFIX" ;;
         esac
+        [ $? -eq 0 ] || { echo "Failed to import $img" ; failed+=" $img" ; }
     done
     popd >/dev/null
 
     $OPENSTACK image list
     os_extpack_image_umount $dir
+    if [ -n "$failed" ] ; then
+        echo "Failed to import from $ext_folder:$failed"
+        return 1
+    fi
 }
 
 os_image_import_list()
@@ -1774,15 +1793,17 @@ os_octavia_image_import()
     if [ -n "$olds" ] ; then
         $OPENSTACK image delete $olds 2>/dev/null
     fi
-    os_image_import $dir $file amphora-x64-haproxy "--visibility private"
+    os_image_import $dir $file amphora-x64-haproxy "--visibility private" || return 1
     local id news=$($OPENSTACK image list -f value --property name=amphora-x64-haproxy -c ID | grep -vxF "$olds")
     [ -n "$news" ] || return 1
+    local rc=0
     for id in $news ; do
-        $OPENSTACK image set --tag amphora $id
+        $OPENSTACK image set --tag amphora $id || { echo "Failed to tag amphora-x64-haproxy image $id" ; rc=1 ; }
     done
     for id in $($OPENSTACK image list -f value --property name=amphora-x64-haproxy -c ID | grep -xF "$olds") ; do
-        $OPENSTACK image unset --tag amphora $id
+        $OPENSTACK image unset --tag amphora $id || { echo "Failed to untag amphora-x64-haproxy image $id" ; rc=1 ; }
     done
+    return $rc
 }
 
 os_octavia_init()
@@ -2485,18 +2506,20 @@ os_manila_image_import()
     local olds=$($OPENSTACK image list -f value --property name=manila-service-image -c ID)
     local retired=$($OPENSTACK image list -f value --tag manila-service-image-retired -c ID)
     if [ -n "$olds$retired" ] ; then
-        $OPENSTACK image delete $olds $retired 2>/dev/null
+        $OPENSTACK image delete $olds $retired || echo "Could not delete every old manila-service-image; keeping the rest"
     fi
-    os_image_import $dir $file manila-service-image "--visibility private"
+    os_image_import $dir $file manila-service-image "--visibility private" || return 1
     local id news=$($OPENSTACK image list -f value --property name=manila-service-image -c ID | grep -vxF "$olds")
     [ -n "$news" ] || return 1
+    local rc=0
     for id in $news ; do
-        $OPENSTACK image set --tag manila-service-image $id
+        $OPENSTACK image set --tag manila-service-image $id || { echo "Failed to tag manila-service-image $id" ; rc=1 ; }
     done
     for id in $($OPENSTACK image list -f value --property name=manila-service-image -c ID | grep -xF "$olds") ; do
         $OPENSTACK image set --name manila-service-image-${id:0:8} --tag manila-service-image-retired $id &&
-            $OPENSTACK image unset --tag manila-service-image $id
+            $OPENSTACK image unset --tag manila-service-image $id || { echo "Failed to retire old manila-service-image $id" ; rc=1 ; }
     done
+    return $rc
 }
 
 os_manila_init()
@@ -2632,7 +2655,7 @@ os_ironic_deploy_kernel_import()
         $OPENSTACK image delete $okernel 2>/dev/null
     fi
 
-    openstack image create --disk-format raw --file $kernel --public deploy.kernel
+    openstack image create --disk-format raw --file $kernel --public deploy.kernel || return 1
     cp -f $kernel /tftpboot/deploy.kernel
 }
 
@@ -2645,7 +2668,7 @@ os_ironic_deploy_initramfs_import()
         $OPENSTACK image delete $oinitrd 2>/dev/null
     fi
 
-    openstack image create --disk-format raw --file $initramfs --public deploy.initrd
+    openstack image create --disk-format raw --file $initramfs --public deploy.initrd || return 1
     cp -f $initramfs /tftpboot/deploy.initrd
 }
 
