@@ -23,6 +23,12 @@ data "keycloak_realm" "master" {
   realm = "master"
 }
 
+# server.cert can hold a CA-issued chain, leaf first. Registered whole, the chain can fail to
+# decode in Keycloak, which then rejects every AuthnRequest; register only the leaf (#2312).
+locals {
+  leaf_cert = regex("(?s)-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", file("/var/www/certs/server.cert"))
+}
+
 resource "keycloak_saml_client" "ceph_dashboard_client" {
   realm_id  = data.keycloak_realm.master.id
   client_id = "https://${var.cube_controller}:7443/ceph/auth/saml2/metadata"
@@ -43,8 +49,8 @@ resource "keycloak_saml_client" "ceph_dashboard_client" {
   encryption_mask_generation_function = ""
   front_channel_logout   = true
   name_id_format         = "persistent"
-  signing_certificate    = file("/var/www/certs/server.cert")
-  encryption_certificate = file("/var/www/certs/server.cert")
+  signing_certificate    = local.leaf_cert
+  encryption_certificate = local.leaf_cert
 
   valid_redirect_uris                 = ["https://${var.cube_controller}:7443/ceph/auth/saml2"]
   assertion_consumer_post_url         = "https://${var.cube_controller}:7443/ceph/auth/saml2"
