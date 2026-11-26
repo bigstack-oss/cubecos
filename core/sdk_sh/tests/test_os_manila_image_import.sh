@@ -1,12 +1,14 @@
 #!/bin/bash
 #
 # Unit test for os_manila_image_import in ../modules/sdk_os.sh (#2364).
-# An in-use image cannot be deleted. Import must tag each new image and retire
-# surviving old images by name and tag, so Manila finds only the new image.
+# An image a server boots from must not be deleted: depending on the clone,
+# glance refuses, or moves it to the RBD trash and reports success. Import must
+# delete only unused old images, tag each new image and retire surviving old
+# images by name and tag, so Manila finds only the new image.
 # Self-contained: extract only the function under test and simulate Glance in
 # files; no cluster or network is needed. Compatible with bash 3.2 and bash 5.
 #   Run: bash test_os_manila_image_import.sh (exit 0 = pass)
-#   SRC=<other sdk_os.sh> tests another version; develop must fail cases 3-7.
+#   SRC=<other sdk_os.sh> tests another version; develop must fail cases 4, 6, 9-11.
 #
 set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,6 +41,12 @@ OTHER=18cc2f62-4d27-49fa-9d6b-5ad0e39e4d2a
 add_image() { printf '%s|%s\n' "$2" "$3" > "$TABLE/$1"; }
 fake_openstack() {
     echo "$*" >> "$CALLS"
+    if [ "$#" = 9 ] && [ "$1 $2 $3 $4" = "server list --all-projects --image" ] &&
+        [ "$6 $7 $8 $9" = "-f value -c ID" ]; then
+        [ "$SERVER_LIST_FAIL" = 0 ] || return 1
+        if grep -qxF "$5" "$IN_USE"; then echo 5e1f0000-0000-4000-8000-000000000001; fi
+        return 0
+    fi
     [ "$#" -ge 2 ] && [ "$1" = image ] || return 2
     local action=$2 id name tags filter value path rc=0 new_name='' tag='' unset_tag=0
     shift 2
@@ -65,9 +73,13 @@ fake_openstack() {
         delete)
             [ "$#" -gt 0 ] || return 2
             for id in "$@" ; do
-                if grep -qxF "$id" "$IN_USE"; then
+                if grep -qxF "$id" "$IN_USE" && [ "$IN_USE_DELETE" = refuse ]; then
                     echo "Image $id is in use" >&2
                     rc=1
+                elif grep -qxF "$id" "$IN_USE"; then
+                    # glance moves it to the RBD trash and reports it deleted
+                    rm "$TABLE/$id"
+                    echo "$id" >> "$TMP/trashed"
                 elif [ -f "$TABLE/$id" ]; then
                     rm "$TABLE/$id"
                 else
@@ -129,7 +141,8 @@ reset() {
     mkdir "$TABLE"
     : > "$CALLS"
     : > "$IN_USE"
-    NEXT=0 NEW='' IMPORT_FAIL=0
+    : > "$TMP/trashed"
+    NEXT=0 NEW='' IMPORT_FAIL=0 SERVER_LIST_FAIL=0 IN_USE_DELETE=refuse
 }
 run_import() {
     : > "$CALLS"
@@ -180,7 +193,7 @@ run_import
 check_current '4 repeated import'
 check_retired '4 survivor'
 check_gone '4 previous import deleted' "$FIRST"
-check '4 one delete call for current and retired' "$(grep '^image delete' "$CALLS")" "image delete $FIRST $OLD"
+check '4 the in-use image is not handed to delete' "$(grep '^image delete' "$CALLS")" "image delete $FIRST"
 
 # 5. Retire an image, release it, then import again to collect it.
 reset
@@ -201,7 +214,7 @@ add_image "$OLD" "$ACTIVE" "$ACTIVE"
 add_image "$OTHER" "$ACTIVE" "$ACTIVE"
 echo "$OLD" > "$IN_USE"
 run_import
-check '6 one delete call for both old images' "$(grep '^image delete' "$CALLS")" "image delete $OTHER $OLD"
+check '6 one delete call, unused image only' "$(grep '^image delete' "$CALLS")" "image delete $OTHER"
 check_current '6 mixed old images'
 check_retired '6 in-use survivor'
 check_gone '6 unused old deleted' "$OTHER"
@@ -223,6 +236,38 @@ add_image "$OTHER" "$ACTIVE-custom" 'customer-tag'
 run_import
 check_current '8 unrelated image'
 check_image '8 untouched custom image' "$OTHER" "$ACTIVE-custom" 'customer-tag'
+
+# 9. Glance reports an in-use image deleted (it goes to the RBD trash): the
+#    image a share server boots from is still kept, renamed and retired.
+reset
+IN_USE_DELETE=trash
+add_image "$OLD" "$ACTIVE" "$ACTIVE"
+echo "$OLD" > "$IN_USE"
+run_import
+check_current '9 trash: in-use old'
+check_retired '9 trash: survivor'
+check '9 trash: no delete call' "$(grep -c '^image delete' "$CALLS")" 0
+
+# 10. Same, retired image still in use on the next import, then released.
+FIRST=$NEW
+run_import
+check_current '10 trash: repeated import'
+check_retired '10 trash: retired survivor kept'
+check_gone '10 trash: unused previous import deleted' "$FIRST"
+check '10 trash: nothing trashed' "$(cat "$TMP/trashed")" ''
+: > "$IN_USE"
+run_import
+check_current '10 trash: released'
+check_gone '10 trash: released retired deleted' "$OLD"
+
+# 11. The server list fails: the old image is not deleted but retired.
+reset
+add_image "$OLD" "$ACTIVE" "$ACTIVE"
+SERVER_LIST_FAIL=1
+run_import
+check_current '11 server list fails'
+check_retired '11 kept and retired'
+check '11 no delete call' "$(grep -c '^image delete' "$CALLS")" 0
 
 if [ "$fail" = 0 ]; then
     echo "PASS ($pass checks)"
