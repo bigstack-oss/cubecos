@@ -33,6 +33,10 @@ static LogRotateConf placement_log_conf("placement", "/var/log/placement/*.log",
 #define CONF        "/etc/nova/nova.conf"
 #define IRONIC_CONF        "/etc/nova/nova-ironic.conf"
 #define PLA_CONF    "/etc/placement/placement.conf"
+#define API_UWSGI_IN    "/etc/nova/nova-api-uwsgi.ini.in"
+#define API_UWSGI       "/etc/nova/nova-api-uwsgi.ini"
+#define META_UWSGI_IN   "/etc/nova/nova-metadata-uwsgi.ini.in"
+#define META_UWSGI      "/etc/nova/nova-metadata-uwsgi.ini"
 
 #define SSL_KEYFILE     "/var/lib/nova/certs/server.pem"
 #define SSL_KEYFILE_SRC "/var/www/certs/server.pem"
@@ -51,6 +55,7 @@ static const char NOVA_CEPH_LOG[] = "/var/log/qemu/";
 
 static const char PLACEMENT_API_NAME[] = "openstack-placement-api";
 static const char API_NAME[] = "openstack-nova-api";
+static const char META_NAME[] = "openstack-nova-metadata-api";
 static const char SCHL_NAME[] = "openstack-nova-scheduler";
 static const char CNTR_NAME[] = "openstack-nova-conductor";
 static const char VNCP_NAME[] = "openstack-nova-novncproxy";
@@ -800,6 +805,30 @@ WriteInstanceMetricsCronJob(bool enabled)
     return true;
 }
 
+// uWSGI binds the compute and metadata API ports itself, on the address nova's eventlet
+// servers listened on (osapi_compute_listen / metadata_listen above), so clients and the
+// haproxy backends still reach the same address and port. The ini files are static
+// otherwise; the address is per node, so they are rendered at commit.
+static bool
+WriteUwsgiConf(const std::string& ctrlIp, const std::string& workers)
+{
+    const struct { const char* in; const char* out; } confs[] = {
+        { API_UWSGI_IN, API_UWSGI },
+        { META_UWSGI_IN, META_UWSGI },
+    };
+
+    for (auto& c : confs) {
+        if (HexUtilSystemF(0, 0, "sed -e \"s/@BIND_ADDR@/%s/\" -e \"s/@WORKERS@/%s/\" %s > %s",
+                           ctrlIp.c_str(), workers.c_str(), c.in, c.out) != 0) {
+            HexLogError("failed to update %s", c.out);
+            return false;
+        }
+        HexSetFileMode(c.out, "root", GROUP, 0640);
+    }
+
+    return true;
+}
+
 static bool
 NovaService(bool enabled)
 {
@@ -809,6 +838,7 @@ NovaService(bool enabled)
         SystemdCommitService(enabled, SCHL_NAME, true);    // nova-scheduler
         SystemdCommitService(enabled, VNCP_NAME, true);    // nova-novncproxy
         SystemdCommitService(enabled, API_NAME, true);     // nova-api
+        SystemdCommitService(enabled, META_NAME, true);    // nova-metadata
         // SystemdCommitService(enabled, SPICEP_NAME, true);   // nova-spicehtml5proxy
     }
 
@@ -1049,6 +1079,9 @@ Commit(bool modified, int dryLevel)
         WriteConfig(PLA_CONF, SB_SEC_WFMT, '=', plaCfg);
         WriteConfig(IRONIC_CONF, SB_SEC_WFMT, '=', ironicCfg);
         HexSetFileMode(PLA_CONF, PLA_USER, PLA_USER, 0644);
+
+        if (IsControl(s_eCubeRole))
+            WriteUwsgiConf(ctrlIp, std::to_string(GetControlWorkers(IsConverged(s_eCubeRole), IsEdge(s_eCubeRole))));
     }
 
     // 3. Service Setup (service must be running)

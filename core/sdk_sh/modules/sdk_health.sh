@@ -2676,7 +2676,9 @@ health_nova_report()
 
 health_nova_check()
 {
-    stale_api_check_repair openstack-nova-api 8774 nova-api python3
+    # No stale_api_check_repair for nova-api any more: it reads a backed-up accept queue
+    # as a hung eventlet server, but under uWSGI a worker takes one request at a time, so
+    # a queue on 8774 can be requests waiting their turn, and kill -9 would drop them
 
     local service_stats="$($OPENSTACK compute service list -f value -c Binary -c Host -c Status -c State 2>/dev/null)"
     local scheduler_up=$(echo "$service_stats" | grep scheduler | grep -i enabled | grep -i up | wc -l )

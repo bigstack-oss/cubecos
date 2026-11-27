@@ -1,0 +1,26 @@
+# Rendered by config_nova.cpp into /etc/nova/nova-metadata-uwsgi.ini; the options are
+# nova-api-uwsgi.ini.in's, see there for why, except for the request log at the end
+[uwsgi]
+http-socket = @BIND_ADDR@:8775
+module = nova.wsgi.metadata:application
+home = /opt/openstack-epoxy
+
+# nova-api.log, where metadata requests were logged while nova-api served both APIs
+pyargv = --config-file /etc/nova/nova.conf --config-dir /etc/nova/nova.d --log-file nova-api.log
+
+master = true
+processes = @WORKERS@
+lazy-apps = true
+need-app = true
+die-on-term = true
+
+buffer-size = 65535
+add-header = Connection: close
+# The metadata pipeline in api-paste.ini has no request_log, so nova does not log its
+# requests; eventlet's server did, to nova-api.log. Have uWSGI write that line instead,
+# the client address first as eventlet did (X-Forwarded-For from the metadata proxy).
+# The line starts with an oslo-style timestamp: logstash's grok for /var/log/nova
+# requires one, and sends lines it cannot parse to the parse-failure log instead
+req-logger = file:/var/log/nova/nova-api.log
+log-req-encoder = format ${strftime:%%Y-%%m-%%d %%H:%%M:%%S} ${msgnl}
+log-format = %(pid) INFO nova.metadata.uwsgi [-] %(var.HTTP_X_FORWARDED_FOR),%(addr) "%(method) %(uri) %(proto)" status: %(status) len: %(size) time: %(secs)
