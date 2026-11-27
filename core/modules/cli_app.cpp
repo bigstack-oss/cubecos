@@ -56,7 +56,7 @@ appProjectCreateMain(int argc, const char** argv)
     std::string mgmtMet = argv[2];
     std::string pubNet = argv[3];
 
-    int result = HexSystemF(0, "appctl create project --name=%s --net.public=%s --net.mgmt=%s", name.c_str(), pubNet.c_str(), mgmtMet.c_str());
+    int result = HexSystemF(0, "appctl create project --name=%s --net.public=%s --net.mgmt=%s", HexBuildShellArg(name).c_str(), HexBuildShellArg(pubNet).c_str(), HexBuildShellArg(mgmtMet).c_str());
     if (result != 0) {
         return CLI_FAILURE;
     }
@@ -77,7 +77,7 @@ appProjectDeleteMain(int argc, const char** argv)
     if (!CliReadConfirmation())
         return CLI_SUCCESS;
 
-    int result = HexSystemF(0, "appctl delete project --name=%s", name.c_str());
+    int result = HexSystemF(0, "appctl delete project --name=%s", HexBuildShellArg(name).c_str());
     if (result != 0) {
         return CLI_FAILURE;
     }
@@ -110,7 +110,7 @@ frameworkCheckPortAccessMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    int result = HexSystemF(0, "appctl check framework portAccess --name=%s", name.c_str());
+    int result = HexSystemF(0, "appctl check framework portAccess --name=%s", HexBuildShellArg(name).c_str());
     if (result != 0) {
         return CLI_FAILURE;
     }
@@ -151,7 +151,7 @@ frameworkCreateMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    int result = HexSystemF(0, "appctl create framework --name=%s --net.public=%s --net.mgmt=%s --net.loadbalancer.ip=%s --os.image=%s", name.c_str(), publicNet.c_str(), mgmtNet.c_str(), loadBalancerIp.c_str(), osImage.c_str());
+    int result = HexSystemF(0, "appctl create framework --name=%s --net.public=%s --net.mgmt=%s --net.loadbalancer.ip=%s --os.image=%s", HexBuildShellArg(name).c_str(), HexBuildShellArg(publicNet).c_str(), HexBuildShellArg(mgmtNet).c_str(), HexBuildShellArg(loadBalancerIp).c_str(), HexBuildShellArg(osImage).c_str());
     if (result != 0) {
         return CLI_FAILURE;
     }
@@ -186,7 +186,7 @@ frameworkDeleteMain(int argc, const char** argv)
         return CLI_INVALID_ARGS;
     }
 
-    int result = HexSystemF(0, "appctl delete framework --name=%s", name.c_str());
+    int result = HexSystemF(0, "appctl delete framework --name=%s", HexBuildShellArg(name).c_str());
     if (result != 0) {
         return CLI_FAILURE;
     }
