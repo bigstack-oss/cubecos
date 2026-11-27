@@ -178,6 +178,11 @@ StatusMain(int argc, const char** argv)
         CliPrintf("The Advisor agent is not installed on this node.");
         return CLI_SUCCESS;
     }
+    // After an unenroll the binary stays; say so rather than ask it.
+    if (access(ADVISOR_AGENT_CERT, F_OK) != 0) {
+        CliPrintf("This node is not enrolled with the Advisor.");
+        return CLI_SUCCESS;
+    }
 
     // Whether the unit is running, and any repair for it, is the health
     // framework's job (health_advisor_check / health_advisor_repair), not a
@@ -227,33 +232,6 @@ TargetUnsetMain(int argc, const char** argv)
     return CLI_SUCCESS;
 }
 
-// The action level and consent dial this cluster serves (ADR 0011/0017). The
-// files live on the node and the agent reads them as authoritative; these
-// commands are how an operator sets them without editing files by hand. The sdk
-// owns validation and restarts the agent so the change takes effect.
-static int
-LevelMain(int argc, const char** argv)
-{
-    if (argc != 1 /* [0]="level" */)
-        return CLI_INVALID_ARGS;
-
-    // Shows both dials; advisor_level_show prints them, nothing to add here.
-    return HexSpawn(0, HEX_SDK, "advisor_level_show", NULL) == 0 ? CLI_SUCCESS : CLI_FAILURE;
-}
-
-static int
-LevelSetMain(int argc, const char** argv)
-{
-    if (argc != 2 /* [0]="level_set" [1]=observe|operate|internal */)
-        return CLI_INVALID_ARGS;
-
-    if (HexSpawn(0, HEX_SDK, "advisor_level_set", argv[1], NULL) != 0)
-        return CLI_FAILURE;
-
-    CliPrintf("This cluster's Advisor action level is now %s.", argv[1]);
-    return CLI_SUCCESS;
-}
-
 static int
 SsoOriginsMain(int argc, const char** argv)
 {
@@ -265,16 +243,23 @@ SsoOriginsMain(int argc, const char** argv)
     return HexSpawn(0, HEX_SDK, "advisor_sso_origins_show", NULL) == 0 ? CLI_SUCCESS : CLI_FAILURE;
 }
 
+// The customer's kill switch. The sdk does the work on every node and carries
+// on when the Advisor cannot be reached.
 static int
-ConsentSetMain(int argc, const char** argv)
+UnenrollMain(int argc, const char** argv)
 {
-    if (argc != 2 /* [0]="consent_set" [1]=always|destructive|never */)
+    if (argc != 1 /* [0]="unenroll" */)
         return CLI_INVALID_ARGS;
 
-    if (HexSpawn(0, HEX_SDK, "advisor_consent_set", argv[1], NULL) != 0)
-        return CLI_FAILURE;
+    CliPrint("This stops the Advisor agent on every node of this cluster and deletes each node's Advisor identity.");
+    CliPrint("It also removes the Advisor's console login, its certificate authority and its sign-in settings from every node.");
+    CliPrint("Cluster logins may be interrupted for a moment while the sign-in settings are removed.");
+    CliPrint("The Advisor can no longer reach this cluster until it is enrolled again.");
+    if (!CliReadConfirmation())
+        return CLI_SUCCESS;
 
-    CliPrintf("This cluster's Advisor consent setting is now %s.", argv[1]);
+    if (HexSpawn(0, HEX_SDK, "advisor_unenroll", NULL) != 0)
+        return CLI_FAILURE;
     return CLI_SUCCESS;
 }
 
@@ -328,14 +313,8 @@ CLI_MODE_COMMAND("advisor", "target_set", TargetSetMain, NULL,
 CLI_MODE_COMMAND("advisor", "target_unset", TargetUnsetMain, NULL,
     "Stop allowing a web endpoint.", "target_unset <name>");
 
-CLI_MODE_COMMAND("advisor", "level", LevelMain, NULL,
-    "Show the action level and consent this cluster serves the Advisor.", "level");
-
-CLI_MODE_COMMAND("advisor", "level_set", LevelSetMain, NULL,
-    "Set how far the Advisor may go on this cluster.", "level_set <observe|operate|internal>");
-
-CLI_MODE_COMMAND("advisor", "consent_set", ConsentSetMain, NULL,
-    "Set how much the Advisor asks a person before it acts.", "consent_set <always|destructive|never>");
+CLI_MODE_COMMAND("advisor", "unenroll", UnenrollMain, NULL,
+    "Cut this cluster off from the Advisor. Enrol again to return.", "unenroll");
 
 CLI_MODE_COMMAND("advisor", "sso_origins", SsoOriginsMain, NULL,
     "List the Advisor console origins Skyline may complete a federated login on.",
