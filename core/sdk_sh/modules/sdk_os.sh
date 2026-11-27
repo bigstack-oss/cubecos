@@ -1141,34 +1141,94 @@ os_volume_type_list()
     openstack volume type list -f value -c Name  | grep -v __DEFAULT__
 }
 
+_os_volume_type_rows()
+{
+    local types
+    types=$($OPENSTACK volume type list --long -f json -c ID -c Name -c Properties) || return 1
+    jq -r --arg n "$1" 'sort_by(.ID)[] | select(.Name == $n) |
+        "\(.ID) \(if (.Properties.volume_backend_name // "") != "" then 1 else 0 end)"' <<< "$types"
+}
+
+# A delete that failed because another node deleted the type first is not an error;
+# any other failure, an unreachable API included, is.
+_os_volume_type_gone()
+{
+    $OPENSTACK volume type show "$1" 2>&1 >/dev/null | grep -q "No volumetype with a name or ID"
+}
+
+# Every control node runs this in the same commit, and Cinder accepts two creates
+# of one name that arrive together. So settle on one type by ID: every caller keeps
+# the lowest ID and deletes the rest, and nothing after the create goes by name.
 os_volume_type_create()
 {
     local name=$1
     local backend_name=$2
+    local rows keep tagged id tag attempt
 
-    if $($OPENSTACK volume type list --long --format value -c Name | grep -q $name) ; then
-        echo "volume type $name already exists"
-    else
-        $OPENSTACK volume type create $name
-        $OPENSTACK volume type set $name --property volume_backend_name=$backend_name
-    fi
+    for attempt in 1 2 3 ; do
+        rows=$(_os_volume_type_rows "$name") || {
+            echo "Error: cannot list volume types for $name" >&2
+            return 1
+        }
+        if [ -z "$rows" ] ; then
+            $OPENSTACK volume type create --property "volume_backend_name=$backend_name" "$name" || :
+            rows=$(_os_volume_type_rows "$name") || {
+                echo "Error: cannot list volume types for $name" >&2
+                return 1
+            }
+            [ -n "$rows" ] || continue
+        fi
+        read -r keep tagged <<< "$rows"
+        while read -r id tag ; do
+            [ "$id" = "$keep" ] && continue
+            echo "delete duplicate volume type $name ($id)"
+            if ! $OPENSTACK volume type delete "$id" && ! _os_volume_type_gone "$id" ; then
+                echo "Error: cannot delete duplicate volume type $name ($id)" >&2
+                return 1
+            fi
+        done <<< "$rows"
+        if [ "$tagged" = 0 ] ; then
+            $OPENSTACK volume type set --property "volume_backend_name=$backend_name" "$keep" || continue
+        fi
+        rows=$(_os_volume_type_rows "$name") || {
+            echo "Error: cannot list volume types for $name" >&2
+            return 1
+        }
+        if [ "$rows" = "$keep 1" ] ; then
+            echo "volume type $name ready ($keep)"
+            return 0
+        fi
+    done
+    echo "Error: cannot settle on one volume type named $name" >&2
+    return 1
 }
 
 os_volume_type_clear()
 {
     local backend_list=${1:-CubeStorage}
+    local types rows id name rc=0
 
-    readarray type_array <<<"$($OPENSTACK volume type list --long -c Name -f value)"
-    declare -p type_array > /dev/null
-    for type in "${type_array[@]}" ; do
-        if $(echo $backend_list __DEFAULT__ | grep -q $type) ; then
-            # required type
-            :
-        else
-            echo "delete volume type $type"
-            $OPENSTACK volume type delete $type
+    types=$($OPENSTACK volume type list --long -f json -c ID -c Name) || {
+        echo "Error: cannot list volume types" >&2
+        return 1
+    }
+    rows=$(jq -r '.[] | [.ID, .Name] | @tsv' <<< "$types") || {
+        echo "Error: cannot parse volume types" >&2
+        return 1
+    }
+    while IFS=$'\t' read -r id name ; do
+        [ -n "$id" ] || continue
+        case ",$backend_list," in
+            *",$name,"*) continue ;;
+        esac
+        [ "$name" = __DEFAULT__ ] && continue
+        echo "delete volume type $name ($id)"
+        if ! $OPENSTACK volume type delete "$id" && ! _os_volume_type_gone "$id" ; then
+            echo "Error: failed to delete volume type $name ($id)" >&2
+            rc=1
         fi
-    done
+    done <<< "$rows"
+    return "$rc"
 }
 
 os_endpoint_snapshot_create()
