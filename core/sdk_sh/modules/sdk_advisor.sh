@@ -18,11 +18,7 @@ ADVISOR_TRUST_ANCHOR=/etc/pki/ca-trust/source/anchors/cube-advisor.crt
 # an upgrade); repeated here because hex_sdk cannot read the C header.
 ADVISOR_IDENTITY_DIR=/etc/cube/advisor-agent
 ADVISOR_AGENT_CERT=$ADVISOR_IDENTITY_DIR/agent.crt
-# The action level and consent this cluster serves (ADR 0011/0017), read by the
-# agent at startup and authoritative there. Absent means the fail-closed default.
-# The vocabulary is the agent's; the two lists below track it by hand.
-ADVISOR_LEVEL_FILE=$ADVISOR_IDENTITY_DIR/action-level
-ADVISOR_CONSENT_FILE=$ADVISOR_IDENTITY_DIR/consent
+ADVISOR_AGENT_BIN=/usr/local/bin/cube-advisor-agent
 # Where this node enrolled, so `advisor upgrade` knows whom to ask. Written at
 # enrol from the token; older nodes fall back to the tunnel host on 443.
 ADVISOR_URL_FILE=$ADVISOR_IDENTITY_DIR/advisor-url
@@ -68,6 +64,9 @@ ADVISOR_SSO_REPORTED_FILE=/etc/cube-advisor-agent/sso-origins-reported
 # nowhere else -- which is why the reported set is propagated from here rather
 # than read directly: keystone answers on every control node, enrolled or not.
 ADVISOR_SSO_AGENT_REPORT=$ADVISOR_IDENTITY_DIR/console-origins
+# The agent's egress proxy, one URL; this module sends its Advisor calls
+# through it too.
+ADVISOR_PROXY_FILE=$ADVISOR_IDENTITY_DIR/proxy
 # The target whose federated login returns through the console, and the path it
 # returns on. Skyline's, because it is the only cluster app that borrows
 # keystone's own SAML service provider and so the only one keystone has to be
@@ -276,6 +275,40 @@ _advisor_target_address_valid()
 #
 # Atomic write (temp file in the same directory, then mv): the agent reads
 # these at any moment and must never see half of one.
+# _advisor_proxy
+#
+# The proxy in $ADVISOR_PROXY_FILE, read as the agent reads it: a bare
+# host:port is http. Prints nothing when there is none.
+_advisor_proxy()
+{
+    local p
+
+    [ -r "$ADVISOR_PROXY_FILE" ] || return 0
+    p=$(tr -d '[:space:]' < "$ADVISOR_PROXY_FILE")
+    [ -n "$p" ] || return 0
+    [[ "$p" == *://* ]] || p="http://$p"
+    case "$p" in
+        http://?*|https://?*) printf '%s\n' "$p" ;;
+        *) echo "Warning: ignoring $ADVISOR_PROXY_FILE: want an http or https proxy URL" >&2 ;;
+    esac
+}
+
+# _advisor_curl <curl args>
+#
+# curl to the Advisor, through the proxy file when there is one; otherwise
+# curl's own https_proxy handling applies.
+_advisor_curl()
+{
+    local p
+
+    p=$(_advisor_proxy)
+    if [ -n "$p" ] ; then
+        curl --proxy "$p" "$@"
+    else
+        curl "$@"
+    fi
+}
+
 _advisor_write_file()
 {
     local path=$1 content=$2
@@ -514,70 +547,6 @@ advisor_targets_unset()
         return 1
     fi
     _advisor_targets_write "$new"
-}
-
-# _advisor_agent_reload_setting
-#
-# Makes a level or consent change take effect: the agent reads both files once,
-# at startup. Restart, not reload -- it has no reload path for these.
-_advisor_agent_reload_setting()
-{
-    systemctl is-active --quiet "$ADVISOR_AGENT_UNIT_NAME" || return 0
-    if ! systemctl restart "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1 ; then
-        echo "Warning: wrote the setting but could not restart $ADVISOR_AGENT_UNIT_NAME;" \
-             "it takes effect on the next start" >&2
-    fi
-}
-
-# advisor_level_set <observe|operate|internal>
-#
-# Records the action level this cluster serves (ADR 0011), in the file the
-# agent reads as authoritative. The vocabulary is the agent's.
-advisor_level_set()
-{
-    local level=$1
-    case "$level" in
-        observe|operate|internal) ;;
-        *)
-            echo "Error: not an action level: '$level'; expected observe, operate or internal" >&2
-            return 1
-            ;;
-    esac
-    _advisor_write_file "$ADVISOR_LEVEL_FILE" "$level" || return 1
-    _advisor_agent_reload_setting
-}
-
-# advisor_consent_set <always|destructive|never>
-#
-# How much this cluster asks a person before the agent acts (ADR 0011). Same
-# custody as the level.
-advisor_consent_set()
-{
-    local consent=$1
-    case "$consent" in
-        always|destructive|never) ;;
-        *)
-            echo "Error: not a consent setting: '$consent'; expected always, destructive or never" >&2
-            return 1
-            ;;
-    esac
-    _advisor_write_file "$ADVISOR_CONSENT_FILE" "$consent" || return 1
-    _advisor_agent_reload_setting
-}
-
-# advisor_level_show
-#
-# The level and consent this node serves, "<field> <value>" per line. An absent
-# file reads as the agent's fail-closed default rather than a blank.
-advisor_level_show()
-{
-    local level consent
-    level=$(head -n1 "$ADVISOR_LEVEL_FILE" 2>/dev/null | tr -d '[:space:]')
-    consent=$(head -n1 "$ADVISOR_CONSENT_FILE" 2>/dev/null | tr -d '[:space:]')
-    [ -n "$level" ] || level="unset (observe)"
-    [ -n "$consent" ] || consent="unset (always)"
-    echo "level $level"
-    echo "consent $consent"
 }
 
 # advisor_targets_discover
@@ -1174,11 +1143,6 @@ def put(name, text, mode):
 put("url", url, 0o600)
 put("secret", secret, 0o600)
 put("console", "true" if e.get("console") else "false", 0o600)
-# The action level and consent the issuer chose. Seeds this node; the files
-# on the node stay authoritative and level_set / consent_set still override.
-for key in ("level", "consent"):
-    if e.get(key):
-        put(key, str(e[key]), 0o600)
 # Optional: a deployment behind a real terminator is covered by the system
 # store and the token says nothing here.
 if e.get("serverCa"):
@@ -1200,7 +1164,7 @@ advisor_current_release()
 {
     local server=$1 token_file=$2 out
 
-    out=$(curl -fsS --max-time 30 \
+    out=$(_advisor_curl -fsS --max-time 30 \
             -H "Authorization: Bearer $(cat "$token_file")" \
             "$server/api/v1/releases/current") || return 1
     printf '%s' "$out" | python3 -c 'import json,sys; v=json.load(sys.stdin).get("version",""); print(v) if v else sys.exit(1)'
@@ -1312,7 +1276,7 @@ advisor_upgrade_node()
     }
     installed=$(advisor_installed_version)
 
-    out=$(curl -fsS --max-time 30 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
+    out=$(_advisor_curl -fsS --max-time 30 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
             "$base/api/v1/releases/current") || {
         echo "Error: the Advisor at $base did not name a current release" >&2
         return 1
@@ -1334,7 +1298,7 @@ advisor_upgrade_node()
 
     local f
     for f in "$ADVISOR_MANIFEST_NAME" "$ADVISOR_SIGNATURE_NAME" "$ADVISOR_MLDSA_SIGNATURE_NAME" "$artifact" ; do
-        curl -fsS --max-time 120 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
+        _advisor_curl -fsS --max-time 120 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
              -o "$tmp/$f" "$base/api/v1/releases/$current/$f" || {
             echo "Error: cannot fetch $f for $current from $base" >&2
             return 1
@@ -1347,14 +1311,26 @@ advisor_upgrade_node()
     echo "Upgraded the Advisor agent: ${installed:-none} -> $current"
 }
 
+# _advisor_node_token <base> <ca> <console>
+#
+# One node token for one peer: the Advisor spends it on redemption.
+_advisor_node_token()
+{
+    local base=$1 ca=$2 console=$3
+
+    _advisor_curl -fsS --max-time 30 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
+        -H 'Content-Type: application/json' -d "{\"console_access\":$console}" \
+        "$base/api/v1/node-tokens" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])'
+}
+
 # advisor_enroll_peers [force]
 #
-# From an enrolled node: fetch a node token over this node's certificate and
-# enrol every node that has no identity yet. Each peer gets its own identity
-# and prints its own fingerprint to verify; console access follows this node.
+# From an enrolled node: enrol every other control node that has no identity
+# yet, each with its own node token. Each peer gets its own identity and
+# prints its own fingerprint to verify; console access follows this node.
 advisor_enroll_peers()
 {
-    local force=${1:-} base ca console=false tok node rc=0 todo=()
+    local force=${1:-} base ca console=false tok node rc=0 todo=() skipped=()
 
     if [ ! -r "$ADVISOR_AGENT_CERT" ] || [ ! -r "$ADVISOR_AGENT_KEY" ] ; then
         echo "Error: this node is not enrolled; paste a token from the Advisor to enrol it first" >&2
@@ -1362,12 +1338,18 @@ advisor_enroll_peers()
     fi
     for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
         [ "$node" = "$HOSTNAME" ] && continue
+        # advisor_enroll refuses non-control nodes.
+        if ! remote_run "$node" "$HEX_SDK is_control_node" >/dev/null 2>&1 ; then
+            skipped+=("$node")
+            continue
+        fi
         if [ -n "$force" ] || ! remote_run $node stat "$ADVISOR_AGENT_CERT" >/dev/null 2>&1 ; then
             todo+=("$node")
         fi
     done
+    [ "${#skipped[@]}" -gt 0 ] && echo "Not enrolled (not control nodes): ${skipped[*]}"
     if [ "${#todo[@]}" -eq 0 ] ; then
-        echo "Every node of this cluster is already enrolled."
+        echo "Every control node of this cluster is already enrolled."
         return 0
     fi
 
@@ -1378,25 +1360,149 @@ advisor_enroll_peers()
         return 1
     }
     [ -r "$ADVISOR_CONSOLE_CA" ] && console=true
-    tok=$(curl -fsS --max-time 30 --cacert "$ca" --cert "$ADVISOR_AGENT_CERT" --key "$ADVISOR_AGENT_KEY" \
-            -H 'Content-Type: application/json' -d "{\"console_access\":$console}" \
-            "$base/api/v1/node-tokens" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])') || {
-        echo "Error: the Advisor refused to issue a node token to this node (is its identity verified?)" >&2
-        return 1
-    }
 
     echo "Enrolling ${#todo[@]} node(s): ${todo[*]}"
     for node in "${todo[@]}" ; do
         echo "== $node"
+        tok=$(_advisor_node_token "$base" "$ca" "$console") || {
+            echo "Error: the Advisor refused to issue a node token to this node (is its identity verified?)" >&2
+            return 1
+        }
         # The token travels over the cluster's own ssh and lands in a root-only
         # file the peer removes when done; never an argument, never in ps.
         if ! printf '%s\n' "$tok" | remote_run $node "umask 077 && mkdir -p /run/advisor-peer && cat > /run/advisor-peer/token" ; then
             echo "   Error: could not deliver the token to $node" >&2 ; rc=1 ; continue
         fi
-        remote_run $node "$HEX_SDK advisor_enroll_token /run/advisor-peer/token '' $force; rc=\$?; rm -f /run/advisor-peer/token; exit \$rc" 2>&1 | sed 's/^/   /' || rc=1
+        # The peer reaches the Advisor the way this node does: its enrolment
+        # and then its agent read the proxy file. One it already has is kept.
+        if [ -r "$ADVISOR_PROXY_FILE" ] && ! remote_run $node stat "$ADVISOR_PROXY_FILE" >/dev/null 2>&1 ; then
+            if ! remote_run $node "umask 077 && mkdir -p $ADVISOR_IDENTITY_DIR && cat > $ADVISOR_PROXY_FILE" < "$ADVISOR_PROXY_FILE" ; then
+                echo "   Error: could not copy the egress proxy setting to $node" >&2 ; rc=1 ; continue
+            fi
+        fi
+        # remote_run drops ssh's stderr, so the peer's errors go to stdout.
+        remote_run $node "$HEX_SDK advisor_enroll_token /run/advisor-peer/token '' $force 2>&1; rc=\$?; rm -f /run/advisor-peer/token; exit \$rc" | sed 's/^/   /'
+        [ "${PIPESTATUS[0]}" -eq 0 ] || rc=1
     done
     [ $rc -eq 0 ] && echo "Verify each new node on the Advisor's enrolment page: its fingerprint is printed above."
     return $rc
+}
+
+# advisor_unenroll_node -- this node only; advisor_unenroll fans it out.
+#
+# Tells the Advisor (best effort), stops the agent and deletes this node's
+# identity and the trust it gave the Advisor. Kept: the proxy file, the web
+# allowlist and the agent binary, all inert without an identity.
+advisor_unenroll_node()
+{
+    local rc=0
+
+    if [ -e "$ADVISOR_AGENT_CERT" ] && [ -x "$ADVISOR_AGENT_BIN" ] ; then
+        # The agent reads the proxy file itself and gives up after 10s.
+        timeout -k 5 15 "$ADVISOR_AGENT_BIN" unenroll >/dev/null 2>&1
+        case $? in
+            0) echo "Told the Advisor this cluster was cut off." ;;
+            7) echo "Note: the Advisor could not be told; carrying on." ;;
+            *) echo "Note: this agent cannot tell the Advisor; carrying on." ;;
+        esac
+    fi
+
+    # The certificate goes last: it is what marks this node as enrolled, so an
+    # interrupted run is picked up again.
+    if [ -d "$ADVISOR_IDENTITY_DIR" ] ; then
+        find "$ADVISOR_IDENTITY_DIR" -mindepth 1 -maxdepth 1 \
+            ! -name "$(basename "$ADVISOR_PROXY_FILE")" ! -name "$(basename "$ADVISOR_AGENT_CERT")" \
+            -exec rm -rf {} + 2>/dev/null
+    fi
+    # Never enabled by CubeCOS; disable covers a symlink made by hand.
+    systemctl disable --now "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1
+    rm -f "$ADVISOR_AGENT_CERT"
+    # Again, in case a health repair restarted it before the certificate went.
+    if systemctl is-active --quiet "$ADVISOR_AGENT_UNIT_NAME" ; then
+        systemctl stop "$ADVISOR_AGENT_UNIT_NAME" >/dev/null 2>&1
+    fi
+    if systemctl is-active --quiet "$ADVISOR_AGENT_UNIT_NAME" ; then
+        echo "Error: could not stop $ADVISOR_AGENT_UNIT_NAME; stop it with: systemctl stop $ADVISOR_AGENT_UNIT_NAME"
+        rc=1
+    fi
+    if [ -e "$ADVISOR_AGENT_CERT" ] || [ -e "$ADVISOR_AGENT_KEY" ] ; then
+        echo "Error: could not delete this node's identity in $ADVISOR_IDENTITY_DIR"
+        rc=1
+    fi
+
+    # Console logins the Advisor's SSH CA could sign.
+    rm -f "$ADVISOR_CONSOLE_CA"
+    if [ -e "$ADVISOR_SSHD_DROPIN" ] ; then
+        rm -f "$ADVISOR_SSHD_DROPIN"
+        systemctl reload sshd >/dev/null 2>&1 || \
+            echo "Warning: could not reload sshd; console trust ends at its next reload"
+    fi
+    if [ -e "$ADVISOR_TRUST_ANCHOR" ] ; then
+        rm -f "$ADVISOR_TRUST_ANCHOR"
+        update-ca-trust extract >/dev/null 2>&1
+    fi
+    # The Advisor's console origins keystone trusted for Skyline WebSSO.
+    advisor_sso_reported_set
+    advisor_sso_apply >/dev/null 2>&1 || \
+        echo "Warning: could not withdraw the Advisor's console origins; the next commit does"
+
+    [ $rc -eq 0 ] && echo "Cut off from the Advisor."
+    return $rc
+}
+
+# advisor_unenroll
+#
+# The cluster's kill switch: cuts every node off from the Advisor, whether or
+# not the Advisor can be reached. Enrol again to return.
+advisor_unenroll()
+{
+    local node enrolled=0 nodes=() unreachable=() failed=()
+
+    # As advisor_enroll: a cluster-level act, done from the control plane.
+    if ! is_control_node ; then
+        echo "Error: run 'advisor unenroll' on a control node; this node's role is ${T_cubesys_role:-unknown}" >&2
+        return 1
+    fi
+
+    [ -e "$ADVISOR_AGENT_CERT" ] && enrolled=1
+    for node in "${CUBE_NODE_LIST_HOSTNAMES[@]}" ; do
+        [ "$node" = "$HOSTNAME" ] && continue
+        # Checked here: remote_run exits the whole run on an unreachable node.
+        if ! is_sshable "$node" ; then
+            unreachable+=("$node")
+            continue
+        fi
+        nodes+=("$node")
+        remote_run "$node" stat "$ADVISOR_AGENT_CERT" >/dev/null 2>&1 && enrolled=1
+    done
+
+    if [ $enrolled -eq 0 ] ; then
+        if [ "${#unreachable[@]}" -eq 0 ] ; then
+            echo "This cluster is not enrolled with the Advisor; nothing to do."
+            return 0
+        fi
+        echo "No reachable node is enrolled with the Advisor."
+    else
+        # Every reachable node, enrolled or not: each holds the console origins.
+        echo "== $HOSTNAME"
+        advisor_unenroll_node 2>&1 | sed 's/^/   /'
+        [ "${PIPESTATUS[0]}" -eq 0 ] || failed+=("$HOSTNAME")
+        for node in "${nodes[@]}" ; do
+            echo "== $node"
+            # remote_run drops ssh's stderr, so the peer's errors go to stdout.
+            remote_run "$node" "$HEX_SDK advisor_unenroll_node 2>&1" | sed 's/^/   /'
+            [ "${PIPESTATUS[0]}" -eq 0 ] || failed+=("$node")
+        done
+    fi
+
+    if [ "${#failed[@]}" -gt 0 ] ; then
+        echo "Error: unenrolment did not complete on: ${failed[*]}. Fix the error shown, then run 'advisor unenroll' again on a control node." >&2
+    fi
+    if [ "${#unreachable[@]}" -gt 0 ] ; then
+        echo "Error: could not reach: ${unreachable[*]}. Run 'advisor unenroll' again on a control node once they can be reached." >&2
+    fi
+    [ "${#failed[@]}" -eq 0 ] && [ "${#unreachable[@]}" -eq 0 ] || return 1
+    echo "This cluster is cut off from the Advisor. Run 'advisor enroll' to return."
 }
 
 advisor_enroll_token()
@@ -1437,36 +1543,9 @@ advisor_enroll_token()
         echo "Advisor's current agent release: $version"
     fi
 
-    # The issuer's action level and consent are written before the agent is
-    # started, so the one restart in advisor_enroll picks them up — level_set
-    # and consent_set each restart the agent, and three restarts in a row is
-    # what made enrolment look stuck. Validated the same way those commands do.
-    local level consent
-    if [ -r "$dir/level" ] ; then
-        level=$(cat "$dir/level")
-        case "$level" in
-            observe|operate|internal) _advisor_write_file "$ADVISOR_LEVEL_FILE" "$level" || return 1 ;;
-            *) echo "Error: the token names an unknown action level '$level'" >&2 ; return 1 ;;
-        esac
-    fi
-    if [ -r "$dir/consent" ] ; then
-        consent=$(cat "$dir/consent")
-        case "$consent" in
-            always|destructive|never) _advisor_write_file "$ADVISOR_CONSENT_FILE" "$consent" || return 1 ;;
-            *) echo "Error: the token names an unknown consent setting '$consent'" >&2 ; return 1 ;;
-        esac
-    fi
-
     advisor_enroll "$server" "$dir/secret" "$version" "$ca_file" "$force"
     rc=$?
     [ $rc -eq 0 ] || return $rc
-
-    # The agent writes the dials the Advisor actually serves this cluster at
-    # (its record, not the token) once it has enrolled; report those.
-    level=$(head -n1 "$ADVISOR_LEVEL_FILE" 2>/dev/null | tr -d '[:space:]')
-    consent=$(head -n1 "$ADVISOR_CONSENT_FILE" 2>/dev/null | tr -d '[:space:]')
-    [ -n "$level" ]   && echo "action level: $level"
-    [ -n "$consent" ] && echo "consent: $consent"
 
     # Console access was decided when the token was issued; say what this node
     # was granted rather than leaving the operator to infer it. The Advisor
@@ -1525,7 +1604,7 @@ advisor_enroll()
     local url="$server/api/v1/releases/$version"
     local f
     for f in "$ADVISOR_MANIFEST_NAME" "$ADVISOR_SIGNATURE_NAME" "$ADVISOR_MLDSA_SIGNATURE_NAME" "$artifact" ; do
-        if ! curl -fsS --max-time 120 \
+        if ! _advisor_curl -fsS --max-time 120 \
                 -H "Authorization: Bearer $(cat "$token_file")" \
                 -o "$tmp/$f" "$url/$f" ; then
             echo "Error: cannot fetch $f from $url" >&2
@@ -1541,9 +1620,12 @@ advisor_enroll()
     # A rebuilt Advisor signs with a new CA, leaving every identity
     # valid-looking and useless. The agent will not replace one unasked, so
     # forcing stays the operator's word, never a retry.
-    local force_arg=""
+    local force_arg="" proxy penv=()
     [ -n "$force" ] && force_arg="-force"
-    /usr/local/bin/cube-advisor-agent enroll \
+    # The agent's enrol call reads HTTPS_PROXY, not the proxy file.
+    proxy=$(_advisor_proxy)
+    [ -n "$proxy" ] && penv=(env "HTTPS_PROXY=$proxy")
+    "${penv[@]}" /usr/local/bin/cube-advisor-agent enroll \
         -server "$server" -token-file "$token_file" -cluster "$cluster" $force_arg
     rc=$?
     case $rc in
