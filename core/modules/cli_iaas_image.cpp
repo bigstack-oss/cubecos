@@ -52,7 +52,7 @@ ImageImportMain(int argc, const char** argv)
         AutoSignalHandlerMgt autoSignalHandlerMgt(UnInterruptibleHdr);
         if (HexSpawnNoSig(UnInterruptibleHdr, (int)true, 0, HEX_CFG, "mount_usb", NULL) != 0) {
             CliPrintf("Could not write to the USB drive. Please check the USB drive and retry the command.\n");
-            return CLI_SUCCESS;
+            return CLI_FAILURE;
         }
 
         HexUtilSystemF(0, 0, HEX_SDK " os_extpack_image_mount %s", USB_MNT_DIR);
@@ -178,7 +178,7 @@ ImageImportMain(int argc, const char** argv)
             CliPrintf("Importing %s complete. It is safe to remove the local image file.", name.c_str());
     }
 
-    return CLI_SUCCESS;
+    return ret == 0 ? CLI_SUCCESS : CLI_FAILURE;
 }
 
 static int
