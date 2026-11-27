@@ -39,6 +39,8 @@ Insert content here.
 ## UI/UX Mockups (Optional)
 
 > Links to design prototypes or wireframes (if applicable).
+> UI change? Add a `ui:<tier>` label: critical, medium, low, or none ([UI tiers](https://github.com/bigstack-oss/cube-cos-ui/blob/develop/.github/REVIEW_LEVELS.md#2-ui-tier)).
+> Critical: link the designer's signed-off design. Medium and low: link a mockup.
 
 None
 
