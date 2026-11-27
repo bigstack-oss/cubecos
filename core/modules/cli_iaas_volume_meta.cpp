@@ -50,7 +50,7 @@ ApplyMain(int argc, const char** argv)
 
     CliSupportHelper support;
     char cmd[256];
-    std::string user, proj, host, filename;
+    std::string user, proj, filename;
 
     if (!CliReadInputStr(argc, argv, 1, "Enter user name: ", &user))
         return CLI_FAILURE;
@@ -166,7 +166,7 @@ CLI_MODE_COMMAND("volume_meta", "create", CreateMain, 0,
 
 CLI_MODE_COMMAND("volume_meta", "apply", ApplyMain, 0,
     "Apply volume metadata file by giving project and user ID.",
-    "apply [<user_name>] [<project_name>] [<file_index>] [<hostname>]");
+    "apply [<user_name>] [<project_name>] [<file_index>]");
 
 CLI_MODE_COMMAND("volume_meta", "list", ListMain, 0,
     "List the volume meta files.",
